@@ -1,714 +1,346 @@
 # LiteMind
 
-An educational, from-first-principles C++20 AI inference engine for the DeepSeek-V2 language model. LiteMind is designed to demonstrate advanced AI concepts including Mixture-of-Experts (MoE) routing, multi-head latent attention with RoPE encoding, and autoregressive text generation.
+DeepSeek-V2 mixture-of-experts inference on the CPU, in C++20, with no
+third-party libraries. Weights stay on the SSD and are paged in as the router
+asks for them, so a 31 GB checkpoint runs on a laptop that has nowhere near
+31 GB of RAM.
 
-**Version:** 0.1.0  
-**Language:** C++20  
-**Build System:** CMake 3.20+
-
----
-
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Building the Project](#building-the-project)
-- [Running the CLI](#running-the-cli)
-- [Project Structure](#project-structure)
-- [Component Reference](#component-reference)
-- [Model Configuration](#model-configuration)
-- [Testing](#testing)
-- [Usage Examples](#usage-examples)
-- [Future Roadmap](#future-roadmap)
-- [Contributing](#contributing)
-- [License](#license)
+Built and tested against
+[deepseek-ai/DeepSeek-V2-Lite](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite)
+(15.7 B parameters, 2.4 B active per token).
 
 ---
 
-## 📖 Overview
+## What happens when you type a prompt
 
-LiteMind is an educational AI inference engine built from first principles in modern C++. It demonstrates how to build an efficient inference framework for large language models, specifically targeting the DeepSeek-V2 architecture. The project is structured to progressively add layers of functionality, starting with model loading and metadata inspection.
-
-### What's Included
-
-- ✅ Model configuration parsing and metadata inspection
-- ✅ SafeTensors file format parsing
-- ✅ DeepSeek-V2 architecture implementation with MoE routing
-- ✅ Multi-head latent attention with RoPE positional encoding
-- ✅ Tokenization and text generation pipeline
-- ✅ KV-cache management for efficient generation
-- ✅ Comprehensive test suite
-- ✅ CLI tool for model inspection and generation
-
-### What's Coming
-
-- 🔄 Optimized CUDA kernels for GPU acceleration
-- 🔄 Quantization support (INT8, FP8)
-- 🔄 Multi-device inference
-- 🔄 Performance benchmarking tools
-- 🔄 Web API server
-
----
-
-## ✨ Features
-
-### Core ML Capabilities
-
-- **DeepSeek-V2 Support**: Full implementation of the DeepSeek-V2 architecture
-- **Mixture-of-Experts (MoE)**: Expert routing with 64 routed + 2 shared experts
-- **Attention Mechanisms**: 
-  - Multi-head latent attention (16 heads, 128 + 64 dims)
-  - Rotary position embeddings (RoPE) with YaRN scaling
-  - Context length: up to 163,840 tokens
-- **Model Parameters**: ~27 billion parameters across 27 transformer layers
-- **Vocabulary**: 102,400 token vocabulary with bfloat16 precision
-
-### Technical Features
-
-- **C++20 Standard**: Modern C++ with zero-cost abstractions
-- **Header-Only Interfaces**: Clean public API design
-- **Efficient Memory Management**: Stack allocation and smart pointers
-- **Comprehensive Logging**: Debug, info, and error level logging
-- **Unit Tests**: Full test coverage with CTest
-
----
-
-## 🏗️ Architecture
-
-LiteMind follows a modular, layered architecture:
+This is the flow the project is built around.
 
 ```
-┌─────────────────────────────────────┐
-│  Application Layer (CLI)            │
-├─────────────────────────────────────┤
-│  DeepSeekRunner (Generation)        │
-│  - Orchestrates inference pipeline  │
-│  - Manages weight loading           │
-│  - Handles token-by-token output    │
-├─────────────────────────────────────┤
-│  Core Components                    │
-│  ┌────────────────────────────────┐ │
-│  │ Tokenizer    │ Model Inference │ │
-│  │              │ & Routing       │ │
-│  ├────────────────────────────────┤ │
-│  │ Attention    │ MoeRouter       │ │
-│  │ KvCache      │ Sampler         │ │
-│  └────────────────────────────────┘ │
-├─────────────────────────────────────┤
-│  Storage & Data Structures          │
-│  ┌────────────────────────────────┐ │
-│  │ SafeTensor   │ CpuTensor       │ │
-│  │ WeightReader │ Tensor          │ │
-│  └────────────────────────────────┘ │
-├─────────────────────────────────────┤
-│  Configuration & Logging            │
-│  - Config, Logger                   │
-└─────────────────────────────────────┘
+  your prompt
+      |
+      v
+  [1] TOKENIZE            byte-level BPE, from tokenizer.json
+      |                   "The capital of" -> [100000, 651, 6884, 280]
+      v
+  [2] PREFILL             one position at a time, filling the KV cache
+      |                   only the final position needs logits
+      v
+  [3] PER LAYER, PER TOKEN
+      |
+      +-- attention       q / kv_a / kv_b / o read straight from the
+      |                   memory mapping; these are touched every step,
+      |                   so the OS keeps them resident
+      |
+      +-- router          64 logits -> softmax -> pick the top 6
+      |
+      +-- LOAD FROM SSD   the 6 chosen experts are paged in
+      |                   (gate, up, down: about 17 MB per expert)
+      |
+      +-- EXECUTE ON CPU  SwiGLU, multi-threaded BF16 kernels
+      |
+      +-- RELEASE TO SSD  once the resident set passes --expert-cache,
+      |                   the least recently used experts are dropped
+      v
+  [4] SAMPLE              greedy by default, or temperature / top-k / top-p
+      |
+      v
+  [5] STREAM              decoded and printed as each token arrives
+      |
+      +--> back to [3] for the next token
 ```
 
-### Component Interaction
-
-```
-main.cpp
-  └─→ Cli (entry point)
-      └─→ Model (config + tensors)
-          ├─→ Config (model hyperparameters)
-          ├─→ WeightReader (loads SafeTensors)
-          ├─→ DeepSeekRunner (inference engine)
-          │   ├─→ Tokenizer (text ↔ tokens)
-          │   ├─→ Attention (transformer layer)
-          │   ├─→ MoeRouter (expert selection)
-          │   ├─→ KvCache (KV store)
-          │   ├─→ Sampler (token sampling)
-          │   └─→ CpuTensor (tensor operations)
-          └─→ Logger (diagnostics)
-```
+Steps 3 and 4 are the point. DeepSeek-V2-Lite holds 64 experts per layer but
+sends each token to 6 of them. Roughly a tenth of the expert weights decide any
+one token, so residency can track the working set instead of the checkpoint.
 
 ---
 
-## 📋 Prerequisites
+## Quick start on Windows 11
 
-### System Requirements
+### 1. Install a compiler
 
-- **OS**: Windows, Linux, or macOS
-- **Compiler**: MSVC 19.10+, GCC 11+, or Clang 12+
-- **CMake**: 3.20 or later
-- **RAM**: Minimum 8GB (16GB recommended for model loading)
+Either toolchain works. MSYS2 is the smaller download.
 
-### Dependencies
+**MSYS2 / MinGW-w64**
 
-- **OpenBLAS**: For linear algebra operations
-  - Windows: `libopenblas.dll.a`
-  - Linux: `libblas3`, `libopenblas-dev`
-  - macOS: Available via Homebrew
+```powershell
+winget install MSYS2.MSYS2
+```
 
-### Optional Dependencies
-
-- **Testing**: CTest (included with CMake)
-- **Documentation**: Doxygen (for generating API docs)
-
----
-
-## 🔧 Installation
-
-### Windows (with MSYS2/MinGW-w64)
-
-1. **Install OpenBLAS** (if not already installed):
-   ```powershell
-   pacman -S mingw-w64-x86_64-openblas
-   ```
-
-2. **Clone the repository**:
-   ```bash
-   git clone https://github.com/yourusername/LiteMind.git
-   cd LiteMind
-   ```
-
-3. **Download the DeepSeek-V2 model** (4 files):
-   ```bash
-   # Place model files in models/ directory
-   # - model-00001-of-000004.safetensors
-   # - model-00002-of-000004.safetensors
-   # - model-00003-of-000004.safetensors
-   # - model-00004-of-000004.safetensors
-   # - config.json
-   # - tokenizer.json
-   ```
-
-### Linux (Ubuntu/Debian)
+Then open **MSYS2 MINGW64** from the Start menu — not "MSYS2 MSYS" and not
+MINGW32, because a 32-bit process cannot memory-map a multi-gigabyte file:
 
 ```bash
-# Install dependencies
-sudo apt-get install cmake build-essential libblas3 libopenblas-dev
+pacman -Syu
+pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
+```
 
-# Clone and navigate
-git clone https://github.com/yourusername/LiteMind.git
+**Visual Studio 2022** — install the "Desktop development with C++" workload.
+CMake comes with it.
+
+### 2. Build
+
+```powershell
+git clone <your-repo-url> LiteMind
 cd LiteMind
-
-# Download model files to models/ directory
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -RunTests
 ```
 
-### macOS
+Or by hand:
 
-```bash
-# Install dependencies
-brew install cmake openblas
-
-# Clone and navigate
-git clone https://github.com/yourusername/LiteMind.git
-cd LiteMind
-```
-
----
-
-## 🏗️ Building the Project
-
-### Configure and Build
-
-**Debug Build**:
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build
-```
-
-**Release Build** (recommended for inference):
-```bash
+```powershell
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+cmake --build build --config Release --parallel
+ctest --test-dir build -C Release --output-on-failure
 ```
 
-**Visual Studio (Multi-config)**:
-```bash
-cmake -S . -B build
-cmake --build build --config Release
+There is nothing to install first. No BLAS, no OpenBLAS, no vcpkg.
+
+### 3. Check the build before downloading 31 GB
+
+```powershell
+python tools\make_test_model.py models-test
+.\build\bin\LiteMind.exe models-test --inspect
+.\build\bin\LiteMind.exe models-test -p "hello" -n 8
 ```
 
-### Build Output
+This writes a 100 KB checkpoint with the same tensor names and shape
+relationships as the real model. The weights are random, so the text is
+meaningless — what a successful run proves is that the loader, the shapes and
+the forward pass all work. Fix any failure here before downloading the weights.
 
-- **Executable**: `build/bin/LiteMind` (or `build/bin/Release/LiteMind` on Windows)
-- **Tests**: Various test executables in `build/bin/`
-- **Build artifacts**: `build/CMakeFiles/`, `build/CMakeCache.txt`
+### 4. Download the real weights
 
-### Build Options
-
-```bash
-# Enable or disable testing
-cmake -S . -B build -DBUILD_TESTING=ON  # Default: ON
-
-# Custom OpenBLAS path (if needed)
-cmake -S . -B build -DOPENBLAS_PATH=/custom/path
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\download_model.ps1
 ```
 
----
+About 31 GB. The download resumes if it is interrupted. To put it on another
+drive:
 
-## 🚀 Running the CLI
-
-### Basic Usage
-
-```bash
-# Run with default model path (models/)
-./build/bin/LiteMind
-
-# Or specify a custom model directory
-./build/bin/LiteMind /path/to/models
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\download_model.ps1 -Destination D:\models\deepseek
 ```
 
-### What the CLI Does
+### 5. Run
 
-The CLI performs the following operations:
-
-1. **Model Inspection**:
-   - Loads model configuration from `config.json`
-   - Reads SafeTensors metadata from model shards
-   - Reports total model size and parameter count
-
-2. **MoE Analysis**:
-   - Extracts Mixture-of-Experts configuration
-   - Reports number of routed vs. shared experts
-   - Calculates expert evaluations per token
-
-3. **Interactive Prompt** (if model is loaded):
-   - Accepts user input for text generation
-   - Runs DeepSeek-V2 inference pipeline
-   - Streams generated tokens to stdout
-
-### Example Session
-
-```bash
-$ ./build/bin/LiteMind models
-
-LiteMind
-Version 0.1.0
-
-[INFO] Loading model from models/
-[INFO] Model size: 45.2 GB (4 SafeTensors shards)
-[INFO] Parameters: 27B
-[INFO] MoE Configuration:
-        - Routed experts: 64
-        - Shared experts: 2
-        - Experts per token: 6
-        - Expert evaluations: 72 per token
-
-Enter prompt: Write a poem about AI.
-> Artificial minds awakening, patterns flowing...
-> Circuits singing ancient songs of logic...
+```powershell
+.\build\bin\LiteMind.exe models --inspect
+.\build\bin\LiteMind.exe models -p "The capital of France is" -n 32
+.\build\bin\LiteMind.exe models -i --expert-cache 4 --warm
 ```
 
 ---
 
-## 📁 Project Structure
+## Memory
+
+Nothing is copied out of the mapping except the norm vectors and the router
+gates, which together are a few tens of megabytes.
+
+| What | Size (V2-Lite) | Where it lives |
+|---|---|---|
+| Embeddings and output head | ~840 MB | mapped, touched every step |
+| Attention, all 27 layers | ~740 MB | mapped, touched every step |
+| Shared experts and the dense layer | ~1.0 GB | mapped, touched every step |
+| **Routed experts** | **~29 GB** | **mapped, ~10% touched per token** |
+| Norms and router gates | ~15 MB | copied to RAM as float32 |
+| KV cache | ~450 KB per position | RAM |
+
+So the always-hot part is roughly 2.6 GB, and the 29 GB of routed experts is
+what streaming exists for.
+
+`--expert-cache N` caps the resident routed experts at N gigabytes. Above the
+cap, the least recently used experts are released back to the SSD. Without the
+flag, residency is left to the operating system's page cache, which is the
+better choice when there is enough RAM.
+
+The KV cache is the one thing that scales with context rather than with the
+model, at about 450 KB per position across all layers. `--context` defaults to
+1024 positions, or roughly 460 MB. Raise it only as far as you need.
+
+`--warm` streams the always-hot weights in before the first prompt, which moves
+the wait out of the first token.
+
+### On speed
+
+Expect single-digit tokens per second at best, and slower on the first pass
+while experts are still cold. The work per token is fixed at about 2.4 B
+active parameters read as BF16, so throughput is a memory-bandwidth question,
+not an arithmetic one. Cold experts are read from the SSD, which is why the
+second run of a similar prompt is usually faster than the first.
+
+---
+
+## Command line
 
 ```
-LiteMind/
-├── CMakeLists.txt              # Build configuration
-├── README.md                   # This file
-├── LICENSE                     # License information
-│
-├── include/                    # Public component interfaces
-│   ├── Attention.hpp          # Multi-head attention layer
-│   ├── Cli.hpp                # Command-line interface
-│   ├── Config.hpp             # Model configuration
-│   ├── CpuTensor.hpp          # CPU tensor operations
-│   ├── DeepSeekRunner.hpp     # Full inference pipeline
-│   ├── KvCache.hpp            # Key-value cache management
-│   ├── Logger.hpp             # Logging utilities
-│   ├── Model.hpp              # Model metadata holder
-│   ├── MoeRouter.hpp          # Expert routing logic
-│   ├── SafeTensor.hpp         # SafeTensors parser
-│   ├── Sampler.hpp            # Token sampling strategies
-│   ├── Tensor.hpp             # Tensor metadata
-│   ├── Tokenizer.hpp          # Tokenization pipeline
-│   └── WeightReader.hpp       # Weight loading from disk
-│
-├── src/                        # Implementation files
-│   ├── main.cpp               # Application entry point
-│   ├── Attention.cpp
-│   ├── Cli.cpp
-│   ├── Config.cpp
-│   ├── CpuTensor.cpp
-│   ├── DeepSeekRunner.cpp
-│   ├── KvCache.cpp
-│   ├── Logger.cpp
-│   ├── Model.cpp
-│   ├── MoeRouter.cpp
-│   ├── SafeTensor.cpp
-│   ├── Sampler.cpp
-│   ├── Tensor.cpp
-│   ├── Tokenizer.cpp
-│   └── WeightReader.cpp
-│
-├── tests/                      # Unit test suite
-│   ├── CMakeLists.txt
-│   ├── AttentionTest.cpp      # Test attention layer
-│   ├── CpuTensorTest.cpp      # Test tensor operations
-│   ├── MoeRouterSamplerTest.cpp # Test routing & sampling
-│   ├── TokenizerRoundTrip.cpp # Test tokenizer
-│   └── WeightReaderTest.cpp   # Test weight loading
-│
-├── models/                     # Model directory (for runtime)
-│   ├── config.json            # Model hyperparameters
-│   ├── tokenizer.json         # Tokenizer vocabulary
-│   ├── model-*.safetensors    # Model weights (4 shards)
-│   └── generation_config.json # Generation parameters
-│
-├── docs/                       # Documentation (reserved)
-├── examples/                   # Usage examples (reserved)
-├── scripts/                    # Utility scripts (reserved)
-├── third_party/               # External dependencies
-├── tools/                      # Development tools (reserved)
-└── build/                      # Build output (generated)
-    ├── bin/                    # Compiled executables
-    ├── CMakeFiles/
-    └── ...
+LiteMind [model-directory] [options]
+
+Prompting
+  -p, --prompt TEXT       Run one prompt and exit
+  -i, --interactive       Keep asking for prompts until you type /exit
+  -n, --max-tokens N      Tokens to generate (default 128)
+      --context N         Prompt plus generated tokens (default 1024)
+
+Sampling (greedy by default, which is reproducible)
+      --temp T            Sample with temperature T instead of greedily
+      --top-k K           Keep only the K most likely tokens (default 40)
+      --top-p P           Nucleus sampling threshold (default 0.95)
+      --repeat-penalty R  Penalise tokens already produced (default 1.0)
+      --seed S            Seed the sampler for a reproducible run
+
+Memory and speed
+  -t, --threads N         Worker threads (default: one per core)
+      --expert-cache GB   Cap the resident routed experts at GB gigabytes
+      --warm              Stream the always-hot weights in at load
+
+Diagnostics
+      --inspect           Report what is in the model directory and exit
+      --show-tokens       Print the token IDs the prompt encoded to
+      --top-logits N      Print the N highest logits predicted after the prompt
+  -q, --quiet             Suppress progress output
+  -h, --help              Show the usage text
 ```
 
 ---
 
-## 🔧 Component Reference
+## If the output looks wrong
 
-### Model Components
+Work through this in order. Each step rules out one layer of the stack.
 
-#### `Config` (include/Config.hpp)
-Manages model hyperparameters and configuration metadata.
+**1. Does the checkpoint load?**
 
-**Key Methods**:
-- `attention_head_dim()`: Get attention head dimension
-- `num_hidden_layers()`: Get number of transformer layers
-- `num_routed_experts()`: Get number of routed experts
-- `hidden_size()`: Get hidden layer dimension
-
-#### `Model` (include/Model.hpp)
-Owns model metadata including configuration, tensors, and file path.
-
-**Key Methods**:
-- `config()`: Access model configuration
-- `tensors()`: Access loaded tensor metadata
-- `path()`: Get model directory path
-- `set_path()`: Set model directory
-
-#### `Tokenizer` (include/Tokenizer.hpp)
-Handles text-to-token and token-to-text conversion.
-
-**Key Methods**:
-- `encode()`: Convert text to token IDs
-- `decode()`: Convert token IDs to text
-- `vocab_size()`: Get vocabulary size
-
-### Inference Components
-
-#### `DeepSeekRunner` (include/DeepSeekRunner.hpp)
-Full end-to-end inference pipeline for DeepSeek-V2.
-
-**Key Methods**:
-- `DeepSeekRunner(model_path, error)`: Load model weights
-- `ready()`: Check if model loaded successfully
-- `generate(tokenizer, tokens, max_new_tokens)`: Generate text
-
-#### `Attention` (include/Attention.hpp)
-Multi-head latent attention with RoPE positional encoding.
-
-**Features**:
-- 16 attention heads
-- 128-dim + 64-dim latent space
-- Grouped query attention
-- YaRN RoPE scaling
-
-#### `MoeRouter` (include/MoeRouter.hpp)
-Mixture-of-Experts routing logic.
-
-**Configuration**:
-- 64 routed experts
-- 2 shared experts
-- Top-6 routing per token
-- Softmax scoring
-
-#### `Sampler` (include/Sampler.hpp)
-Token sampling and selection strategies.
-
-**Methods**:
-- `sample_argmax()`: Greedy selection (highest probability)
-- `sample_multinomial()`: Probabilistic sampling
-- `sample_top_k()`: Top-k filtering
-- `sample_top_p()`: Nucleus (top-p) filtering
-
-### Data Structures
-
-#### `Tensor` (include/Tensor.hpp)
-Metadata-only tensor representation (no data ownership).
-
-**Properties**:
-- Shape (dimensions)
-- Data type (float32, bfloat16, int32, etc.)
-- Stride information
-
-#### `CpuTensor` (include/CpuTensor.hpp)
-CPU-resident tensor with owned data.
-
-**Operations**:
-- Element-wise operations
-- Matrix multiplication (via OpenBLAS)
-- Reshaping and transposition
-
-#### `SafeTensor` (include/SafeTensor.hpp)
-Parser for HuggingFace SafeTensors format.
-
-**Features**:
-- Multi-file shard support
-- Lazy tensor loading
-- Metadata validation
-
-#### `KvCache` (include/KvCache.hpp)
-Key-value cache for efficient generation.
-
-**Optimizations**:
-- Pre-allocated buffers
-- Sliding window cache
-- Memory-efficient updates
-
-### Utilities
-
-#### `Logger` (include/Logger.hpp)
-Lightweight diagnostic logging.
-
-**Levels**:
-- DEBUG: Detailed internal state
-- INFO: General information
-- WARN: Warnings and recoverable errors
-- ERROR: Critical failures
-
-#### `Cli` (include/Cli.hpp)
-Command-line interface and user interaction.
-
----
-
-## 🔍 Model Configuration
-
-The model configuration is stored in `models/config.json`:
-
-```json
-{
-  "model_type": "deepseek_v2",
-  "hidden_size": 2048,
-  "num_hidden_layers": 27,
-  "num_attention_heads": 16,
-  "num_key_value_heads": 16,
-  "num_experts_per_tok": 6,
-  "n_routed_experts": 64,
-  "n_shared_experts": 2,
-  "vocab_size": 102400,
-  "max_position_embeddings": 163840,
-  "hidden_act": "silu",
-  "intermediate_size": 10944,
-  "moe_intermediate_size": 1408,
-  "qk_nope_head_dim": 128,
-  "qk_rope_head_dim": 64,
-  "v_head_dim": 128,
-  "torch_dtype": "bfloat16",
-  "rope_theta": 10000,
-  "rms_norm_eps": 1e-06,
-  "rope_scaling": {
-    "type": "yarn",
-    "factor": 40,
-    "original_max_position_embeddings": 4096
-  },
-  "attention_bias": false,
-  "tie_word_embeddings": false
-}
+```powershell
+.\build\bin\LiteMind.exe models --inspect
 ```
 
-### Key Parameters Explained
+Every shape is checked against `config.json` at load, so a mismatch names the
+tensor, the shape found and the shape expected rather than producing noise.
 
-- **hidden_size**: Dimension of each transformer layer (2048)
-- **num_hidden_layers**: Number of stacked transformer layers (27)
-- **num_attention_heads**: Number of attention heads (16)
-- **num_experts_per_tok**: How many experts process each token (6)
-- **n_routed_experts**: Total routed experts available (64)
-- **n_shared_experts**: Shared experts used by all tokens (2)
-- **vocab_size**: Token vocabulary size (102,400)
-- **max_position_embeddings**: Maximum context length (163,840 tokens)
-- **torch_dtype**: Precision (bfloat16 for efficiency)
-- **rope_scaling**: Positional encoding with YaRN scaling method
+**2. Are the tokens right?**
 
----
+```powershell
+.\build\bin\LiteMind.exe models -p "The capital of France is" -n 1 --show-tokens
+```
 
-## 🧪 Testing
-
-### Run All Tests
+Compare against Hugging Face:
 
 ```bash
-cd build
-ctest
+python3 tools/reference_logits.py models --prompt "The capital of France is"
 ```
 
-### Run Specific Test
+If the token IDs differ, the tokenizer is the problem and nothing downstream
+can match. Fix that first.
 
-```bash
-ctest -R TokenizerRoundTrip -V
+**3. Are the logits right?**
+
+```powershell
+.\build\bin\LiteMind.exe models -p "The capital of France is" -n 1 --top-logits 10
 ```
 
-### Test Details
+`tools/reference_logits.py` prints the same list from the reference
+implementation. Logits are what the model predicts before any sampling
+decision, so this separates a loading or arithmetic fault from a sampling one.
 
-| Test | Purpose |
-|------|---------|
-| `AttentionTest` | Validates attention computation correctness |
-| `CpuTensorTest` | Tests tensor operations and memory handling |
-| `MoeRouterSamplerTest` | Verifies expert routing and token sampling |
-| `TokenizerRoundTrip` | Ensures text ↔ token conversion is reversible |
-| `WeightReaderTest` | Validates SafeTensors file parsing |
+Compare the *identity and order* of the top tokens, not the third decimal
+place. This runs float32 arithmetic over BF16 weights and the reference may
+accumulate differently, so small numeric differences are expected. If the
+ordering agrees, the model is loading and computing correctly.
 
-### Adding New Tests
+**4. Is it just sampling?**
 
-1. Create `tests/MyTest.cpp`
-2. Add to `tests/CMakeLists.txt`:
-   ```cmake
-   add_test(MyTest tests/MyTest.cpp)
-   ```
-3. Rebuild and run
+Greedy decoding is the default precisely because it is reproducible. If greedy
+output is sensible and sampled output is not, lower `--temp` or `--top-p`.
+
+Note that DeepSeek-V2-Lite is a **base** model, not an instruction-tuned one.
+It continues text; it does not answer questions. Prompt it accordingly:
+
+- good: `The capital of France is`
+- good: `def fibonacci(n):`
+- poor: `What is the capital of France?`
 
 ---
 
-## 💡 Usage Examples
+## What the code does
 
-### Example 1: Basic Model Inspection
+The architecture is DeepSeek-V2, which differs from a conventional transformer
+in two ways that both had to be implemented exactly.
 
-```cpp
-#include "Model.hpp"
-#include "WeightReader.hpp"
+**Multi-head latent attention.** Keys and values are not stored per head.
+Instead the hidden state is compressed to a `kv_lora_rank` latent vector, and
+`kv_b_proj` expands that into every head's key and value. The rotary part of
+the key is *decoupled*: a single `qk_rope_head_dim` vector shared by all heads,
+concatenated onto each head's non-rotary key.
 
-int main() {
-    litemind::Model model;
-    model.set_path("models");
-    
-    std::cout << "Model size: " << model.config().hidden_size() << "\n";
-    std::cout << "Layers: " << model.config().num_hidden_layers() << "\n";
-    std::cout << "Experts: " << model.config().n_routed_experts() << "\n";
-}
+**Rotary embedding with a permutation.** DeepSeek reshapes the rotary channels
+from `[d]` to `[d/2, 2]` and transposes before rotating, so channels stored
+interleaved as `(a0, b0, a1, b1, …)` become `(a0, a1, …, b0, b1, …)`. Rotating
+the raw interleaved layout pairs the wrong channels together and produces
+fluent-looking noise. See `src/Rope.cpp`; `tests/RopeTest.cpp` checks the
+defining property, that a query-key dot product depends only on the relative
+position.
+
+**YaRN frequency scaling.** The frequencies are interpolated, not plain inverse
+powers of theta: low-frequency channels are divided by the scaling factor, high
+frequency channels are left alone, and a linear ramp blends the band between.
+The attention softmax scale also carries a squared magnitude correction —
+without it, attention is about 1.6x too flat on this model.
+
+**Mixture-of-experts routing.** The softmax runs over all 64 experts *before*
+the top-6 cut, and `routed_scaling_factor` applies only when the selected
+weights are left unnormalised. DeepSeek-V2-Lite sets `norm_topk_prob` to false,
+so its expert weights are raw softmax probabilities that deliberately do not
+sum to one. Softmaxing after the cut would renormalise them and change every
+layer's output magnitude.
+
+### Layout
+
+| File | What it does |
+|---|---|
+| `src/Json.cpp` | JSON parser, so config lookups are structural rather than substring matches |
+| `src/Config.cpp` | Parses and validates `config.json`; every shape comes from here |
+| `src/MappedFile.cpp` | Cross-platform mmap with prefetch and release hints |
+| `src/SafeTensor.cpp` | Maps one shard and parses its header |
+| `src/WeightStore.cpp` | Resolves a tensor name to a pointer, enforcing shape and dtype |
+| `src/ExpertCache.cpp` | The bounded expert working set: load, execute, release |
+| `src/Gemm.cpp` | BF16 kernels, hand-vectorised for AVX2 with a portable fallback |
+| `src/Threading.cpp` | A fixed thread pool with a blocking `parallel_for` |
+| `src/Rope.cpp` | YaRN rotary embedding with DeepSeek's channel permutation |
+| `src/Attention.cpp` | Multi-head latent attention for one position |
+| `src/MoeRouter.cpp` | Expert selection, following DeepSeek's gate exactly |
+| `src/Tokenizer.cpp` | Byte-level BPE with added tokens and streaming decode |
+| `src/DeepSeekRunner.cpp` | Weight resolution, the forward pass, prefill and decode |
+| `src/Cli.cpp` | Argument parsing, inspection, the interactive loop |
+
+### Tests
+
+```powershell
+ctest --test-dir build -C Release --output-on-failure
 ```
 
-### Example 2: Text Generation
-
-```cpp
-#include "DeepSeekRunner.hpp"
-#include "Tokenizer.hpp"
-
-int main() {
-    std::string error;
-    litemind::DeepSeekRunner runner("models", error);
-    
-    if (!runner.ready()) {
-        std::cerr << "Failed to load: " << error << "\n";
-        return 1;
-    }
-    
-    litemind::Tokenizer tokenizer("models/tokenizer.json");
-    auto tokens = tokenizer.encode("Write a poem:");
-    
-    std::string generated = runner.generate(tokenizer, tokens, 200);
-    std::cout << "Generated: " << generated << "\n";
-}
-```
-
-### Example 3: Custom Inference Loop
-
-```cpp
-#include "Attention.hpp"
-#include "MoeRouter.hpp"
-
-int main() {
-    litemind::Attention attention;
-    litemind::MoeRouter router;
-    
-    // Your custom inference logic here
-    
-    return 0;
-}
-```
+`JsonTest`, `SafeTensorTest`, `KernelTest`, `RopeTest`,
+`MoeRouterSamplerTest` and `AttentionTest` need no model files.
+`TokenizerRoundTrip` runs only when `models/tokenizer.json` is present.
 
 ---
 
-## 🗺️ Future Roadmap
+## Known limits
 
-### Phase 2: Performance & Optimization
-- [ ] CUDA kernel implementations for GPU acceleration
-- [ ] Quantization support (INT8, FP8, Dynamic)
-- [ ] Graph optimization and kernel fusion
-- [ ] Batch inference support
+- **BF16 only.** The large matrices must be BF16, which is how DeepSeek-V2
+  ships. A float16 or quantised checkpoint is rejected with a message naming
+  the type it found. There is no quantisation yet.
+- **Prefill is sequential.** Prompt tokens are processed one position at a
+  time rather than batched, so a long prompt costs about as much as generating
+  the same number of tokens.
+- **The KV cache stores expanded keys and values.** This trades memory for
+  speed: caching the latent instead would use about seven times less memory but
+  would re-run `kv_b_proj` for every past position on every step. The
+  "absorbed" formulation avoids both costs and is not implemented here.
+- **The pre-tokenizer is hand-written.** It follows the split rules in
+  DeepSeek's `tokenizer.json` and is exact for ASCII. Coverage of less common
+  scripts is approximate; `--show-tokens` exists so you can check.
+- **One sequence at a time.** No batching, no server mode.
 
-### Phase 3: Features
-- [ ] Multi-device inference (CPU + GPU)
-- [ ] Fine-tuning pipeline
-- [ ] LoRA (Low-Rank Adaptation) support
-- [ ] Additional model support (LLaMA, Qwen, etc.)
+## License
 
-### Phase 4: Integration & Tools
-- [ ] HTTP REST API server
-- [ ] WebSocket streaming support
-- [ ] Python bindings (via pybind11)
-- [ ] Performance benchmarking suite
-- [ ] Model quantization tools
-
-### Phase 5: Production Ready
-- [ ] Comprehensive error handling and validation
-- [ ] Distributed inference across multiple nodes
-- [ ] Advanced caching strategies
-- [ ] Monitoring and telemetry
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Here's how to get started:
-
-1. **Fork the repository**
-2. **Create a feature branch**:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-3. **Make your changes** and add tests
-4. **Ensure all tests pass**:
-   ```bash
-   cd build && ctest
-   ```
-5. **Commit with clear messages**
-6. **Push and create a Pull Request**
-
-### Guidelines
-
-- Follow C++20 best practices
-- Write unit tests for new features
-- Update documentation for API changes
-- Keep commits atomic and focused
-- Run clang-format for consistent style
-
----
-
-## 📄 License
-
-This project is licensed under the [LICENSE](LICENSE) file. See the LICENSE file for details.
-
----
-
-## 🔗 Resources
-
-- [DeepSeek-V2 Paper](https://arxiv.org/abs/2405.04434)
-- [SafeTensors Format](https://huggingface.co/docs/safetensors/)
-- [RoPE Positional Encoding](https://arxiv.org/abs/2104.09864)
-- [YaRN Scaling](https://arxiv.org/abs/2309.00071)
-- [C++20 Standard](https://en.cppreference.com/w/cpp/20)
-
----
-
-## 📧 Contact & Support
-
-For questions, issues, or suggestions:
-- Open an [Issue](https://github.com/yourusername/LiteMind/issues)
-- Start a [Discussion](https://github.com/yourusername/LiteMind/discussions)
-- Email: your.email@example.com
-
----
-
-**Last Updated**: 2026-08-18  
-**Maintained by**: LiteMind Team
+MIT. See `LICENSE`.

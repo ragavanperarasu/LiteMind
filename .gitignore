@@ -1,4 +1,4 @@
-# CMake build outputs
+# Build outputs
 /build/
 /out/
 CMakeCache.txt
@@ -6,15 +6,6 @@ CMakeFiles/
 cmake_install.cmake
 CTestTestfile.cmake
 Testing/
-
-# IDE and editor files
-.vs/
-.vscode/
-*.sln
-*.vcxproj*
-*.user
-
-# Compiled artifacts
 *.o
 *.obj
 *.a
@@ -24,14 +15,18 @@ Testing/
 *.dylib
 *.exe
 
-# Downloaded model weights, tokenizer assets, and model-specific configuration
-# are local runtime dependencies and are intentionally never versioned.
-/models/*
-!/models/.gitkeep
-
-build/
-models/
-*.exe
-*.obj
-*.o
+# IDE and editor files
+.vs/
 .vscode/
+*.sln
+*.vcxproj*
+*.user
+
+# Model weights and tokenizer assets are multi-gigabyte runtime dependencies
+# fetched with scripts/download_model.ps1. They are never versioned.
+/models/
+/models-test/
+
+# Python bytecode from the tools directory
+__pycache__/
+*.pyc

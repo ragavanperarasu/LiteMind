@@ -1,358 +1,171 @@
 #include "SafeTensor.hpp"
 
-#include <array>
-#include <cctype>
-#include <cstdint>
-#include <fstream>
+#include "Json.hpp"
+
+#include <cstring>
 #include <limits>
-#include <optional>
 #include <string_view>
 
 namespace litemind {
 namespace {
 
-constexpr std::uint64_t maximum_header_size = 128U * 1024U * 1024U;
+/** A header larger than this is treated as a corrupt or non-SafeTensors file. */
+constexpr std::uint64_t maximum_header_size = 512ULL * 1024ULL * 1024ULL;
 
-class HeaderReader final {
-public:
-    HeaderReader(const std::string_view source, const std::uint64_t data_start)
-        : source_(source), data_start_(data_start) {}
+[[nodiscard]] DataType parse_data_type(const std::string_view text) noexcept {
+    if (text == "BF16") return DataType::BFloat16;
+    if (text == "F16") return DataType::Float16;
+    if (text == "F32") return DataType::Float32;
+    if (text == "F64") return DataType::Float64;
+    if (text == "I8") return DataType::Int8;
+    if (text == "I16") return DataType::Int16;
+    if (text == "I32") return DataType::Int32;
+    if (text == "I64") return DataType::Int64;
+    if (text == "U8") return DataType::UInt8;
+    if (text == "BOOL") return DataType::Bool;
+    return DataType::Unknown;
+}
 
-    [[nodiscard]] bool parse(std::vector<Tensor>& tensors, std::string& error) {
-        skip_whitespace();
-        if (!consume('{')) {
-            error = "SafeTensors header must begin with a JSON object.";
-            return false;
-        }
-
-        skip_whitespace();
-        while (!consume('}')) {
-            const auto name = read_string();
-            if (!name || !consume(':')) {
-                error = "SafeTensors header has an invalid object entry.";
-                return false;
-            }
-
-            if (*name == "__metadata__") {
-                if (!skip_value()) {
-                    error = "SafeTensors metadata value is malformed.";
-                    return false;
-                }
-            } else {
-                Tensor tensor("", {}, DataType::Unknown, 0U);
-                if (!read_tensor(*name, tensor)) {
-                    error = "SafeTensors tensor entry is malformed: " + *name;
-                    return false;
-                }
-                tensors.push_back(std::move(tensor));
-            }
-
-            skip_whitespace();
-            if (consume('}')) {
-                break;
-            }
-            if (!consume(',')) {
-                error = "SafeTensors header entries must be comma separated.";
-                return false;
-            }
-            skip_whitespace();
-        }
-
-        skip_whitespace();
-        if (position_ != source_.size()) {
-            error = "SafeTensors header contains trailing data.";
-            return false;
-        }
-        return true;
-    }
-
-private:
-    [[nodiscard]] bool read_tensor(const std::string& name, Tensor& tensor) {
-        if (!consume('{')) {
-            return false;
-        }
-
-        std::optional<DataType> data_type;
-        std::optional<std::vector<std::size_t>> shape;
-        std::optional<std::array<std::uint64_t, 2U>> offsets;
-        skip_whitespace();
-
-        while (!consume('}')) {
-            const auto key = read_string();
-            if (!key || !consume(':')) {
-                return false;
-            }
-
-            if (*key == "dtype") {
-                const auto text = read_string();
-                if (!text) {
-                    return false;
-                }
-                data_type = parse_data_type(*text);
-                if (*data_type == DataType::Unknown) {
-                    return false;
-                }
-            } else if (*key == "shape") {
-                shape = read_shape();
-                if (!shape) {
-                    return false;
-                }
-            } else if (*key == "data_offsets") {
-                offsets = read_offsets();
-                if (!offsets) {
-                    return false;
-                }
-            } else if (!skip_value()) {
-                return false;
-            }
-
-            skip_whitespace();
-            if (consume('}')) {
-                break;
-            }
-            if (!consume(',')) {
-                return false;
-            }
-            skip_whitespace();
-        }
-
-        if (!data_type || !shape || !offsets || (*offsets)[1] < (*offsets)[0]) {
-            return false;
-        }
-        tensor = Tensor(name, std::move(*shape), *data_type, data_start_ + (*offsets)[0]);
-        return tensor.byte_size() == (*offsets)[1] - (*offsets)[0];
-    }
-
-    [[nodiscard]] std::optional<std::vector<std::size_t>> read_shape() {
-        if (!consume('[')) {
-            return std::nullopt;
-        }
-
-        std::vector<std::size_t> shape;
-        skip_whitespace();
-        if (consume(']')) {
-            return shape;
-        }
-        while (true) {
-            const auto value = read_unsigned();
-            if (!value || *value > std::numeric_limits<std::size_t>::max()) {
-                return std::nullopt;
-            }
-            shape.push_back(static_cast<std::size_t>(*value));
-            skip_whitespace();
-            if (consume(']')) {
-                return shape;
-            }
-            if (!consume(',')) {
-                return std::nullopt;
-            }
-        }
-    }
-
-    [[nodiscard]] std::optional<std::array<std::uint64_t, 2U>> read_offsets() {
-        if (!consume('[')) {
-            return std::nullopt;
-        }
-        const auto begin = read_unsigned();
-        if (!begin || !consume(',')) {
-            return std::nullopt;
-        }
-        const auto end = read_unsigned();
-        if (!end || !consume(']')) {
-            return std::nullopt;
-        }
-        return std::array<std::uint64_t, 2U>{*begin, *end};
-    }
-
-    [[nodiscard]] std::optional<std::uint64_t> read_unsigned() {
-        skip_whitespace();
-        const std::size_t begin = position_;
-        while (position_ < source_.size() && std::isdigit(static_cast<unsigned char>(source_[position_])) != 0) {
-            ++position_;
-        }
-        if (begin == position_) {
-            return std::nullopt;
-        }
-        try {
-            return std::stoull(std::string(source_.substr(begin, position_ - begin)));
-        } catch (const std::exception&) {
-            return std::nullopt;
-        }
-    }
-
-    [[nodiscard]] std::optional<std::string> read_string() {
-        skip_whitespace();
-        if (position_ == source_.size() || source_[position_] != '"') {
-            return std::nullopt;
-        }
-        ++position_;
-
-        std::string value;
-        while (position_ < source_.size()) {
-            const char character = source_[position_++];
-            if (character == '"') {
-                return value;
-            }
-            if (character != '\\') {
-                value += character;
-                continue;
-            }
-            if (position_ == source_.size()) {
-                return std::nullopt;
-            }
-            const char escaped = source_[position_++];
-            switch (escaped) {
-                case '"': value += '"'; break;
-                case '\\': value += '\\'; break;
-                case '/': value += '/'; break;
-                case 'b': value += '\b'; break;
-                case 'f': value += '\f'; break;
-                case 'n': value += '\n'; break;
-                case 'r': value += '\r'; break;
-                case 't': value += '\t'; break;
-                default: return std::nullopt;
-            }
-        }
-        return std::nullopt;
-    }
-
-    [[nodiscard]] bool skip_value() {
-        skip_whitespace();
-        if (position_ == source_.size()) {
-            return false;
-        }
-        if (source_[position_] == '"') {
-            return read_string().has_value();
-        }
-        if (source_[position_] == '{') {
-            ++position_;
-            skip_whitespace();
-            if (consume('}')) {
-                return true;
-            }
-            while (true) {
-                if (!read_string() || !consume(':') || !skip_value()) {
-                    return false;
-                }
-                skip_whitespace();
-                if (consume('}')) {
-                    return true;
-                }
-                if (!consume(',')) {
-                    return false;
-                }
-            }
-        }
-        if (source_[position_] == '[') {
-            ++position_;
-            skip_whitespace();
-            if (consume(']')) {
-                return true;
-            }
-            while (true) {
-                if (!skip_value()) {
-                    return false;
-                }
-                skip_whitespace();
-                if (consume(']')) {
-                    return true;
-                }
-                if (!consume(',')) {
-                    return false;
-                }
-            }
-        }
-        while (position_ < source_.size()) {
-            const char character = source_[position_];
-            if (character == ',' || character == '}' || character == ']'
-                || std::isspace(static_cast<unsigned char>(character)) != 0) {
-                return true;
-            }
-            ++position_;
-        }
-        return position_ > 0U;
-    }
-
-    void skip_whitespace() {
-        while (position_ < source_.size()
-               && std::isspace(static_cast<unsigned char>(source_[position_])) != 0) {
-            ++position_;
-        }
-    }
-
-    [[nodiscard]] bool consume(const char expected) {
-        skip_whitespace();
-        if (position_ < source_.size() && source_[position_] == expected) {
-            ++position_;
-            return true;
-        }
+/** Translates one header entry into tensor metadata with a file-absolute offset. */
+[[nodiscard]] bool read_entry(const std::string& name, const Json& entry,
+                              const std::uint64_t payload_start, const std::uint64_t file_size,
+                              Tensor& tensor, std::string& error) {
+    if (!entry.is_object()) {
+        error = "tensor entry '" + name + "' is not a JSON object.";
         return false;
     }
 
-    [[nodiscard]] static DataType parse_data_type(const std::string_view text) noexcept {
-        if (text == "BF16") return DataType::BFloat16;
-        if (text == "F16") return DataType::Float16;
-        if (text == "F32") return DataType::Float32;
-        if (text == "F64") return DataType::Float64;
-        if (text == "I8") return DataType::Int8;
-        if (text == "I16") return DataType::Int16;
-        if (text == "I32") return DataType::Int32;
-        if (text == "I64") return DataType::Int64;
-        if (text == "U8") return DataType::UInt8;
-        if (text == "BOOL") return DataType::Bool;
-        return DataType::Unknown;
+    const DataType data_type = parse_data_type(entry.string_or("dtype", ""));
+    if (data_type == DataType::Unknown) {
+        error = "tensor '" + name + "' uses an unsupported dtype '" + entry.string_or("dtype", "?") + "'.";
+        return false;
     }
 
-    std::string_view source_;
-    std::uint64_t data_start_{};
-    std::size_t position_{};
-};
+    const Json* shape_node = entry.find("shape");
+    if (shape_node == nullptr || !shape_node->is_array()) {
+        error = "tensor '" + name + "' has no shape array.";
+        return false;
+    }
+    std::vector<std::size_t> shape;
+    shape.reserve(shape_node->elements().size());
+    for (const Json& dimension : shape_node->elements()) {
+        if (!dimension.is_number() || dimension.number_value() < 0.0) {
+            error = "tensor '" + name + "' has a non-numeric dimension.";
+            return false;
+        }
+        shape.push_back(static_cast<std::size_t>(dimension.number_value()));
+    }
+
+    const Json* offsets = entry.find("data_offsets");
+    if (offsets == nullptr || !offsets->is_array() || offsets->elements().size() != 2U
+        || !offsets->elements()[0].is_number() || !offsets->elements()[1].is_number()) {
+        error = "tensor '" + name + "' has a malformed data_offsets pair.";
+        return false;
+    }
+    const auto begin = static_cast<std::uint64_t>(offsets->elements()[0].number_value());
+    const auto end = static_cast<std::uint64_t>(offsets->elements()[1].number_value());
+    if (end < begin) {
+        error = "tensor '" + name + "' has data_offsets in descending order.";
+        return false;
+    }
+
+    tensor = Tensor(name, std::move(shape), data_type, payload_start + begin);
+    if (tensor.byte_size() != end - begin) {
+        error = "tensor '" + name + "' declares " + std::to_string(end - begin)
+              + " payload bytes but its shape and dtype need " + std::to_string(tensor.byte_size()) + ".";
+        return false;
+    }
+    if (tensor.offset() > file_size || tensor.byte_size() > file_size - tensor.offset()) {
+        error = "tensor '" + name + "' extends past the end of the shard.";
+        return false;
+    }
+    return true;
+}
 
 }  // namespace
 
 bool SafeTensor::open(const std::filesystem::path& path, std::string& error) {
-    path_.clear();
     tensors_.clear();
+    index_.clear();
 
-    std::ifstream file(path, std::ios::binary);
-    if (!file) {
-        error = "Unable to open SafeTensors shard: " + path.string();
+    if (!file_.open(path, error)) {
         return false;
     }
-
-    std::array<unsigned char, 8U> length_bytes{};
-    file.read(reinterpret_cast<char*>(length_bytes.data()), static_cast<std::streamsize>(length_bytes.size()));
-    if (file.gcount() != static_cast<std::streamsize>(length_bytes.size())) {
-        error = "SafeTensors shard does not contain a complete header length.";
+    if (file_.size() < 8U) {
+        error = path.string() + " is too small to be a SafeTensors shard.";
+        file_.close();
         return false;
     }
 
     std::uint64_t header_size{};
-    for (std::size_t index = 0; index < length_bytes.size(); ++index) {
-        header_size |= static_cast<std::uint64_t>(length_bytes[index]) << (index * 8U);
+    const std::byte* const length_bytes = file_.data();
+    for (std::size_t index = 0; index < 8U; ++index) {
+        header_size |= static_cast<std::uint64_t>(std::to_integer<unsigned char>(length_bytes[index]))
+                    << (index * 8U);
     }
-    if (header_size == 0U || header_size > maximum_header_size) {
-        error = "SafeTensors header size is invalid.";
+    if (header_size == 0U || header_size > maximum_header_size || header_size > file_.size() - 8U) {
+        error = path.string() + " declares an implausible SafeTensors header length of "
+              + std::to_string(header_size) + " bytes.";
+        file_.close();
         return false;
     }
 
-    std::string header(header_size, '\0');
-    file.read(header.data(), static_cast<std::streamsize>(header.size()));
-    if (file.gcount() != static_cast<std::streamsize>(header.size())) {
-        error = "SafeTensors shard ended before its header was complete.";
+    const std::uint64_t payload_start = 8U + header_size;
+    const std::string_view header(reinterpret_cast<const char*>(file_.data() + 8U),
+                                  static_cast<std::size_t>(header_size));
+
+    Json document;
+    if (!Json::parse(header, document, error)) {
+        error = path.string() + ": " + error;
+        file_.close();
+        return false;
+    }
+    if (!document.is_object()) {
+        error = path.string() + ": the SafeTensors header must be a JSON object.";
+        file_.close();
         return false;
     }
 
-    HeaderReader reader(header, header_size + length_bytes.size());
-    if (!reader.parse(tensors_, error)) {
-        tensors_.clear();
+    tensors_.reserve(document.members().size());
+    for (const auto& [name, entry] : document.members()) {
+        if (name == "__metadata__") {
+            continue;
+        }
+        Tensor tensor;
+        if (!read_entry(name, entry, payload_start, file_.size(), tensor, error)) {
+            error = path.string() + ": " + error;
+            tensors_.clear();
+            index_.clear();
+            file_.close();
+            return false;
+        }
+        index_.emplace(name, tensors_.size());
+        tensors_.push_back(std::move(tensor));
+    }
+
+    if (tensors_.empty()) {
+        error = path.string() + " contains no tensors.";
+        file_.close();
         return false;
     }
-    path_ = path;
     return true;
 }
 
-const std::filesystem::path& SafeTensor::path() const noexcept { return path_; }
-const std::vector<Tensor>& SafeTensor::tensors() const noexcept { return tensors_; }
+const Tensor* SafeTensor::find(const std::string& name) const {
+    const auto entry = index_.find(name);
+    return entry == index_.end() ? nullptr : &tensors_[entry->second];
+}
+
+const std::byte* SafeTensor::payload(const Tensor& tensor) const noexcept {
+    return file_.view(tensor.offset(), tensor.byte_size());
+}
+
+void SafeTensor::prefetch(const Tensor& tensor) const noexcept {
+    file_.prefetch(tensor.offset(), tensor.byte_size());
+}
+
+void SafeTensor::release(const Tensor& tensor) const noexcept {
+    file_.release(tensor.offset(), tensor.byte_size());
+}
 
 }  // namespace litemind
