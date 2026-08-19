@@ -193,11 +193,40 @@ the wait out of the first token.
 
 ### On speed
 
-Expect single-digit tokens per second at best, and slower on the first pass
-while experts are still cold. The work per token is fixed at about 2.4 B
-active parameters read as BF16, so throughput is a memory-bandwidth question,
-not an arithmetic one. Cold experts are read from the SSD, which is why the
-second run of a similar prompt is usually faster than the first.
+Every token reads about 2.4 B active parameters as BF16, roughly 5 GB of
+traffic. Throughput is therefore a bandwidth question, not an arithmetic one,
+and where that bandwidth comes from decides everything: RAM is about ten times
+faster than an NVMe SSD, so the split between cached and cold experts matters
+far more than the CPU does.
+
+On a laptop with 32 GB of RAM, expect:
+
+- **The first few tokens to be slow** — several seconds each, sometimes more.
+  Nothing is cached yet and almost every expert comes off the SSD.
+- **Then roughly 1 to 2 tokens per second**, once the hot weights and the
+  frequently chosen experts have settled in the page cache.
+- **Less RAM to mean steadier SSD traffic** and a lower steady-state rate,
+  not a failure. It still runs.
+
+Two things follow from this that are worth knowing before the first run:
+
+**Prefill is sequential.** Prompt tokens are processed one position at a time,
+so a 20-token prompt costs about what 20 generated tokens cost. A long prompt
+takes minutes before any output appears. `Reading the prompt: N / M tokens`
+tracks it, so you can tell progress from a hang. Start short.
+
+**`--warm` moves the wait, it does not remove it.** It streams roughly 2.6 GB
+of always-hot weights at startup, which takes a while on its own but stops the
+first token from absorbing all of it.
+
+A sensible first run:
+
+```powershell
+.\build\bin\LiteMind.exe models -p "The capital of France is" -n 16 --warm
+```
+
+Then watch the `Experts:` line at the end. A hit rate that climbs across runs
+means the page cache is doing its job.
 
 ---
 

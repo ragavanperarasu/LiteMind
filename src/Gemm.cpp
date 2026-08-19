@@ -106,12 +106,17 @@ constexpr std::size_t rows_per_task = 32U;
 float dot(const float* left, const float* right, std::size_t count);
 
 std::string kernel_description() {
+    // The hand-written dot product is AVX2. Naming AVX-512 here would claim a
+    // kernel that does not exist; the most it does on such a machine is let the
+    // compiler widen the surrounding scalar loops.
+#if defined(__AVX2__) && defined(__FMA__)
 #if defined(__AVX512F__)
-    return "AVX2/AVX-512 BF16 kernels";
-#elif defined(__AVX2__) && defined(__FMA__)
+    return "AVX2 + FMA BF16 kernels (AVX-512 available but unused)";
+#else
     return "AVX2 + FMA BF16 kernels";
+#endif
 #elif defined(__AVX2__)
-    return "AVX2 BF16 kernels";
+    return "AVX2 BF16 kernels (no FMA)";
 #else
     return "portable scalar BF16 kernels (rebuild with -march=native for AVX2)";
 #endif
