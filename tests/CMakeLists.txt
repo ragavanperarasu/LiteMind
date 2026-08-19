@@ -4,6 +4,12 @@
 function(litemind_add_test name)
     add_executable(${name} ${name}.cpp)
     target_link_libraries(${name} PRIVATE litemind_core)
+    # Tests must be as self-contained as the executable, or they fail to start
+    # for reasons that have nothing to do with what they are testing.
+    if(LITEMIND_STATIC_RUNTIME AND MSVC)
+        set_property(TARGET ${name} PROPERTY
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
     add_test(NAME ${name} COMMAND ${name} ${ARGN})
 endfunction()
 
@@ -21,5 +27,9 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/models/tokenizer.json")
 else()
     add_executable(TokenizerRoundTrip TokenizerRoundTrip.cpp)
     target_link_libraries(TokenizerRoundTrip PRIVATE litemind_core)
+    if(LITEMIND_STATIC_RUNTIME AND MSVC)
+        set_property(TARGET TokenizerRoundTrip PROPERTY
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
     message(STATUS "TokenizerRoundTrip built but not registered: models/tokenizer.json is absent")
 endif()

@@ -57,7 +57,27 @@ one token, so residency can track the working set instead of the checkpoint.
 
 ## Quick start on Windows 11
 
+### 0. Check what you have
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\check_environment.ps1
+```
+
+Reports compilers and their versions, CMake, Python, MSYS2, disk space and RAM
+in one pass, and says what to fix. It changes nothing. Paste its output when
+asking for help.
+
 ### 1. Install a compiler
+
+LiteMind is C++20 and 64-bit only. That means **GCC 10 or newer**, Clang 12 or
+newer, or Visual Studio 2019 16.11 or newer.
+
+> **If you have `C:\MinGW`, it will not work.** That is the old MinGW.org
+> toolchain, typically GCC 6.3 from 2016. It is 32-bit and predates C++20, and
+> a 32-bit process cannot memory-map a multi-gigabyte checkpoint regardless.
+> Install MSYS2 alongside it — there is no need to remove it. `scripts\build.ps1`
+> searches known toolchain locations before falling back to PATH, so a stale
+> `C:\MinGW` will not be picked up.
 
 Either toolchain works. MSYS2 is the smaller download.
 
@@ -68,15 +88,25 @@ winget install MSYS2.MSYS2
 ```
 
 Then open **MSYS2 MINGW64** from the Start menu — not "MSYS2 MSYS" and not
-MINGW32, because a 32-bit process cannot memory-map a multi-gigabyte file:
+MINGW32:
 
 ```bash
 pacman -Syu
 pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
 ```
 
+You only need that shell for the install. `scripts\build.ps1` finds the
+compiler from any shell afterwards.
+
 **Visual Studio 2022** — install the "Desktop development with C++" workload.
 CMake comes with it.
+
+Check what you have:
+
+```powershell
+g++ --version
+g++ -dumpmachine    # must contain x86_64
+```
 
 ### 2. Build
 
@@ -200,6 +230,87 @@ Diagnostics
       --top-logits N      Print the N highest logits predicted after the prompt
   -q, --quiet             Suppress progress output
   -h, --help              Show the usage text
+```
+
+---
+
+## If it prints nothing at all
+
+Running the executable and getting *no output whatsoever* — no text, no error,
+straight back to the prompt — almost always means Windows could not start the
+process because a runtime DLL was missing. PowerShell does not report that as
+an error, which is why it looks like a program that ran and said nothing.
+
+Confirm it by checking the exit code:
+
+```powershell
+.\build\bin\LiteMind.exe --help
+$LASTEXITCODE
+```
+
+- `-1073741515` is `STATUS_DLL_NOT_FOUND`. That is this problem.
+- `0` means it really did run, so you are looking at a stale executable from an
+  older build. Rebuild.
+
+The build links the C++ runtime statically so the executable is self-contained
+and this cannot happen. If you built before that was in place, rebuild from
+scratch:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Clean -RunTests
+```
+
+`build.ps1` now runs the executable after building it and reports this
+explicitly rather than leaving you to guess.
+
+If static linking fails because your MinGW installation has no static
+libraries, turn it off and put the MinGW `bin` directory on PATH instead:
+
+```powershell
+cmake -S . -B build -DLITEMIND_STATIC_RUNTIME=OFF -DCMAKE_BUILD_TYPE=Release
+$env:PATH = "C:\msys64\mingw64\bin;$env:PATH"
+```
+
+### `winget install MSYS2.MSYS2` fails with exit code 1
+
+MSYS2 is already installed. The installer refuses to write into a directory
+that already holds an installation and exits with 1 — it reports
+`TargetDirectoryInUse` in its log.
+
+Do not try to reinstall it. Install the toolchain package into the copy you
+already have:
+
+```powershell
+& "C:\msys64\usr\bin\bash.exe" -lc "pacman -Sy --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-ninja"
+```
+
+If pacman complains about a stale keyring or a corrupt database:
+
+```powershell
+& "C:\msys64\usr\bin\bash.exe" -lc "pacman -Syu --noconfirm"
+```
+
+### "does not support this" / "requires the language dialect CXX20"
+
+The compiler is too old. Check which one CMake picked — the line reading
+`Check for working CXX compiler:` in its output names the path. If it says
+`C:/MinGW/bin/c++.exe`, see the compiler note in step 1.
+
+`scripts\build.ps1` reports every compiler it found, with the reason each was
+rejected, and picks a usable one automatically. To name one yourself:
+
+```powershell
+powershell -File scripts\build.ps1 -CompilerPath C:\msys64\mingw64\bin\g++.exe
+```
+
+### "Does not match the generator used previously"
+
+The build directory remembers how it was configured and CMake will not switch
+generators in place. `build.ps1` detects this and clears the directory for you.
+By hand:
+
+```powershell
+Remove-Item -Recurse -Force build
 ```
 
 ---
