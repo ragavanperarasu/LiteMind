@@ -12,7 +12,6 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include <memoryapi.h>
 #else
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -24,6 +23,40 @@ namespace litemind {
 namespace {
 
 #if defined(_WIN32)
+
+/**
+ * PrefetchVirtualMemory arrived in Windows 8, and MinGW only declares it when
+ * _WIN32_WINNT is raised to match. Rather than force that on the whole
+ * translation unit, resolve it at runtime: prefetching is a hint, so a system
+ * that lacks it should simply skip it instead of failing to build or refusing
+ * to start.
+ */
+struct MemoryRangeEntry final {
+    PVOID VirtualAddress;
+    SIZE_T NumberOfBytes;
+};
+
+using PrefetchVirtualMemoryFunction = BOOL(WINAPI*)(HANDLE, ULONG_PTR, MemoryRangeEntry*, ULONG);
+
+[[nodiscard]] PrefetchVirtualMemoryFunction prefetch_function() noexcept {
+    static const PrefetchVirtualMemoryFunction resolved = [] () -> PrefetchVirtualMemoryFunction {
+        const HMODULE library = ::GetModuleHandleW(L"kernel32.dll");
+        if (library == nullptr) {
+            return nullptr;
+        }
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif
+        return reinterpret_cast<PrefetchVirtualMemoryFunction>(
+            ::GetProcAddress(library, "PrefetchVirtualMemory"));
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+    }();
+    return resolved;
+}
+
 /** Formats the last Win32 error as readable text rather than a bare number. */
 [[nodiscard]] std::string last_error_text() {
     const DWORD code = ::GetLastError();
@@ -167,13 +200,16 @@ void MappedFile::prefetch(const std::uint64_t offset, const std::uint64_t length
     if (data_ == nullptr || length == 0U || offset >= size_) {
         return;
     }
-    const std::uint64_t clamped = std::min(length, size_ - offset);
+    const PrefetchVirtualMemoryFunction prefetch_pages = prefetch_function();
+    if (prefetch_pages == nullptr) {
+        return;  // Windows 7 or earlier: the pages fault in on first touch.
+    }
 
-    WIN32_MEMORY_RANGE_ENTRY range{};
+    const std::uint64_t clamped = std::min(length, size_ - offset);
+    MemoryRangeEntry range{};
     range.VirtualAddress = const_cast<std::byte*>(data_ + offset);
     range.NumberOfBytes = static_cast<SIZE_T>(clamped);
-    // A hint only: on Windows 7 the entry point is absent and this simply fails.
-    ::PrefetchVirtualMemory(::GetCurrentProcess(), 1U, &range, 0U);
+    static_cast<void>(prefetch_pages(::GetCurrentProcess(), 1U, &range, 0U));
 }
 
 void MappedFile::release(const std::uint64_t offset, const std::uint64_t length) const noexcept {

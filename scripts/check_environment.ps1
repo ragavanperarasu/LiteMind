@@ -111,12 +111,13 @@ foreach ($candidate in @("C:\msys64", "D:\msys64", "E:\msys64", "$env:USERPROFIL
 }
 
 if ($msys2) {
-    Write-Host "  Installed at : $msys2" -ForegroundColor Green
+    Write-Host ("  {0,-13}: {1}" -f "installed at", $msys2) -ForegroundColor Green
     foreach ($environment in @("mingw64", "ucrt64", "clang64")) {
         $compiler = Join-Path $msys2 "$environment\bin\g++.exe"
-        $state = if (Test-Path $compiler) { "present" } else { "not installed" }
-        $colour = if (Test-Path $compiler) { "Green" } else { "DarkGray" }
-        Write-Host "  $environment      : $state" -ForegroundColor $colour
+        $present = Test-Path $compiler
+        $state = if ($present) { "toolchain present" } else { "toolchain not installed" }
+        $colour = if ($present) { "Green" } else { "DarkGray" }
+        Write-Host ("  {0,-13}: {1}" -f $environment, $state) -ForegroundColor $colour
     }
     if ($usable.Count -eq 0) {
         $problems += "MSYS2 is installed at $msys2 but has no 64-bit toolchain. Install it with:`n" +
@@ -129,14 +130,33 @@ if ($msys2) {
 
 # ── Build tools ─────────────────────────────────────────────────────────────
 Write-Section "Build tools"
+
+# Search the chosen toolchain's own bin directory as well as PATH: build.ps1
+# prepends it, so a tool found here is a tool the build can use.
+$toolDirectories = @()
+if ($usable.Count -gt 0) {
+    $toolDirectories += (Split-Path -Parent $usable[0])
+}
+
 foreach ($tool in @("cmake", "ninja", "python", "git")) {
+    $resolved = $null
     $command = Get-Command $tool -ErrorAction SilentlyContinue
     if ($command) {
-        $version = (& $tool --version 2>$null | Select-Object -First 1)
-        Write-Host "  [OK]   $tool  $version" -ForegroundColor Green
+        $resolved = $command.Source
+    } else {
+        foreach ($directory in $toolDirectories) {
+            $candidate = Join-Path $directory "$tool.exe"
+            if (Test-Path $candidate) { $resolved = $candidate; break }
+        }
+    }
+
+    if ($resolved) {
+        $version = (& $resolved --version 2>$null | Select-Object -First 1)
+        $note = if (-not $command) { "  (in the toolchain directory; build.ps1 adds it to PATH)" } else { "" }
+        Write-Host ("  [OK]   {0,-7} {1}{2}" -f $tool, $version, $note) -ForegroundColor Green
     } else {
         $colour = if ($tool -eq "cmake") { "Red" } else { "DarkGray" }
-        Write-Host "  [--]   $tool  not on PATH" -ForegroundColor $colour
+        Write-Host ("  [--]   {0,-7} not found" -f $tool) -ForegroundColor $colour
     }
 }
 if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
