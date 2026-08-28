@@ -1,5 +1,7 @@
 #include "DeepSeekRunner.hpp"
 
+#include "ChatTemplate.hpp"
+
 #include "Gemm.hpp"
 
 #include <algorithm>
@@ -11,6 +13,7 @@
 
 namespace litemind {
 namespace {
+
 
 /** The three matrices of one SwiGLU feed-forward block. */
 struct FeedForwardWeights final {
@@ -527,10 +530,22 @@ bool DeepSeekRunner::generate(const std::vector<std::uint32_t>& prompt_tokens,
     // ── Decode ───────────────────────────────────────────────────────────────
     Sampler sampler(options.sampling);
     Tokenizer::StreamDecoder decoder(state.tokenizer);
+    const std::size_t max_stop_length = StopScanner::longest(options.stop_sequences);
     std::vector<std::uint32_t> history = prompt_tokens;
 
     const auto decode_start = std::chrono::steady_clock::now();
     std::size_t position = prompt_tokens.size();
+
+    // Text is emitted only once it can no longer become part of a stop marker,
+    // so the marker itself never reaches the caller.
+    std::size_t emitted = 0U;
+    bool stopped_on_marker = false;
+    const auto emit_up_to = [&](const std::size_t limit) {
+        if (limit > emitted && options.on_text) {
+            options.on_text(std::string_view(result.text).substr(emitted, limit - emitted));
+        }
+        emitted = std::max(emitted, limit);
+    };
 
     while (result.tokens.size() < options.max_new_tokens) {
         const std::uint32_t token = sampler.next(state.logits, history);
@@ -548,9 +563,23 @@ bool DeepSeekRunner::generate(const std::vector<std::uint32_t>& prompt_tokens,
         history.push_back(token);
 
         const std::string fragment = decoder.push(token);
-        result.text += fragment;
-        if (options.on_text && !fragment.empty()) {
-            options.on_text(fragment);
+        if (!fragment.empty()) {
+            // A marker can straddle the join, so the search restarts just far
+            // enough back to catch one that began in the previous fragment.
+            const std::size_t overlap = std::min(result.text.size(), max_stop_length);
+            const std::size_t search_from = result.text.size() - overlap;
+            result.text += fragment;
+
+            const std::size_t marker = StopScanner::find(result.text, options.stop_sequences, search_from);
+            if (marker != std::string::npos) {
+                emit_up_to(marker);
+                result.text.resize(marker);
+                result.stop_reason = "the model began a new turn";
+                stopped_on_marker = true;
+                break;
+            }
+            emit_up_to(result.text.size()
+                       - StopScanner::unsettled_suffix(result.text, options.stop_sequences));
         }
 
         if (position >= state.options.context_length) {
@@ -564,12 +593,12 @@ bool DeepSeekRunner::generate(const std::vector<std::uint32_t>& prompt_tokens,
         ++position;
     }
 
-    const std::string remainder = decoder.flush();
-    if (!remainder.empty()) {
+    if (!stopped_on_marker) {
+        const std::string remainder = decoder.flush();
         result.text += remainder;
-        if (options.on_text) {
-            options.on_text(remainder);
-        }
+        // Whatever was held back pending a marker that never completed is
+        // ordinary text after all, so it goes out now.
+        emit_up_to(result.text.size());
     }
     result.decode_seconds = seconds_since(decode_start);
     return true;

@@ -4,7 +4,7 @@
     "_note": "A mixture-of-experts model: it holds 15.7 billion parameters but runs only 2.4 billion of them for any one token. That gap is the whole reason this project works on a laptop.",
     "name": "deepseek-ai/DeepSeek-V2-Lite",
     "architecture": "DeepseekV2ForCausalLM",
-    "kind": "base model - it continues text, it does not answer questions",
+    "kind": "instruction-tuned - it carries a chat_template and answers when prompts are wrapped in its User/Assistant frame. The base checkpoint of the same name does not, and continues text instead.",
     "weight_type": "BF16",
     "checkpoint_shards": 4,
     "checkpoint_tensors": 5291,

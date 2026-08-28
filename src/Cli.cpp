@@ -712,6 +712,9 @@ int Cli::run(const CliOptions& options) const {
         }
 
         GenerationOptions generation = options.generation;
+        if (use_chat_template) {
+            generation.stop_sequences = ChatTemplate::stop_sequences();
+        }
         // The heading waits for the first fragment, so it lands after the
         // prefill progress rather than above it.
         bool answer_started = false;

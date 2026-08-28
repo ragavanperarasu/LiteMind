@@ -36,6 +36,20 @@ struct GenerationOptions final {
     SamplingOptions sampling{};
     /** Called with each newly decoded fragment of text, for live output. */
     std::function<void(std::string_view)> on_text;
+
+    /**
+     * Text that ends the reply as soon as the model produces it.
+     *
+     * An instruction-tuned checkpoint has no reason to stop after answering; the
+     * frame it was trained on simply continues into the next turn, so left alone
+     * it plays both sides of the conversation. The marker that opens that next
+     * turn is where its answer actually ends.
+     *
+     * Matched text is removed from the result and never reaches on_text, and a
+     * fragment that might still grow into a match is held back until it is
+     * settled either way.
+     */
+    std::vector<std::string> stop_sequences;
     bool show_progress{true};
 
     /**

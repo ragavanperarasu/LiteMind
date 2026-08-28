@@ -1,9 +1,13 @@
 #include "ChatTemplate.hpp"
 #include "TestSupport.hpp"
 
+#include <string>
+#include <vector>
+
 namespace {
 
 using litemind::ChatTemplate;
+using litemind::StopScanner;
 using test_support::check;
 
 /** The template DeepSeek-V2-Lite-Chat ships in tokenizer_config.json. */
@@ -37,10 +41,45 @@ void formatting() {
           "prompt text is passed through untouched");
 }
 
+void stop_markers() {
+    const std::vector<std::string> stops = ChatTemplate::stop_sequences();
+    check(StopScanner::longest(stops) == std::string("\nAssistant:").size(),
+          "the widest marker is how far back a straddling match can begin");
+
+    // The leading newline anchors a marker to a turn boundary, so a reply that
+    // merely mentions the word mid-sentence is not truncated.
+    check(StopScanner::find("Ask the User: politely", stops) == std::string::npos,
+          "a marker without a turn boundary is not a stop");
+    check(StopScanner::find("Hello.\nUser: next", stops) == 6U,
+          "a marker at a turn boundary is found at its own start");
+    check(StopScanner::find("a\nUser:b\nAssistant:c", stops) == 1U,
+          "the earliest of several markers wins");
+}
+
+void partial_markers_are_held_back() {
+    const std::vector<std::string> stops = ChatTemplate::stop_sequences();
+
+    // The case the scanner exists for: the reply is complete text, but its tail
+    // could still become a marker once the next token lands.
+    check(StopScanner::unsettled_suffix("done.\nUser", stops) == 5U,
+          "a partial marker is held back until it is settled");
+    check(StopScanner::unsettled_suffix("done.\n", stops) == 1U,
+          "a bare newline could still open a turn");
+    check(StopScanner::unsettled_suffix("done.", stops) == 0U,
+          "ordinary text is released immediately");
+
+    // A complete marker is the caller's business, not the holder's; reporting it
+    // as unsettled would stall the emit rather than cut the reply.
+    check(StopScanner::unsettled_suffix("done.\nUser:", stops) == 0U,
+          "a complete marker is not treated as a partial one");
+}
+
 }  // namespace
 
 int main() {
     recognition();
     formatting();
+    stop_markers();
+    partial_markers_are_held_back();
     return test_support::report("ChatTemplateTest");
 }

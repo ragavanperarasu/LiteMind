@@ -88,6 +88,45 @@ $ LiteMind models -p "hi" -n 1 --show-tokens
 Without the frame the same prompt is two tokens, and the model has nothing to
 answer.
 
+## Where the reply ends
+
+Applying the frame is only half of it. Nothing in the frame tells the model to
+*stop* after answering — the training data simply continues into the next turn,
+so left alone the model answers your question and then cheerfully plays both
+sides of the conversation:
+
+```
+ Hi, how can I help you?
+User: Can you tell me the weather for tomorrow in Dallas?
+Assistant: It looks like it will be a sunny day...
+```
+
+Everything from `User:` onward is the model talking to itself. The marker that
+opens the next turn is where its answer actually ended, so those markers are
+stop sequences: `\nUser:` and `\nAssistant:`.
+
+The leading newline is deliberate. It anchors the marker to a turn boundary, so
+a reply that happens to contain the words mid-sentence — "ask the User: politely"
+— is not truncated.
+
+### Why the text cannot simply be printed as it arrives
+
+A marker is generated one token at a time, and it can straddle two fragments.
+Printing eagerly would leak `\nUser` into the reply whenever the `:` had not
+arrived yet. So `StopScanner` releases text only once it can no longer become
+part of a marker:
+
+| Accumulated text | Held back | Why |
+|---|---|---|
+| `done.` | 0 bytes | Nothing here can start a marker |
+| `done.\n` | 1 byte | A newline could still open a turn |
+| `done.\nUser` | 5 bytes | A `:` would complete the marker |
+| `done.\nUser:` | 0 bytes | Complete — the reply is cut here instead |
+
+When a marker completes, the text before it is emitted, the result is truncated
+at the marker, and the decoder's held-back bytes are discarded rather than
+flushed: they belong to text that is no longer part of the reply.
+
 ## What this does not do
 
 Only one turn is formatted. The interactive loop treats every prompt as a fresh

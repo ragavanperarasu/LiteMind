@@ -1,5 +1,7 @@
 #include "ChatTemplate.hpp"
 
+#include <algorithm>
+
 namespace litemind {
 namespace {
 
@@ -40,6 +42,54 @@ std::string ChatTemplate::apply(const std::string_view user_text,
     // leading space of the reply is a token the model is trained to produce.
     formatted.append("Assistant:");
     return formatted;
+}
+
+std::vector<std::string> ChatTemplate::stop_sequences() {
+    // The leading newline matters: it anchors the marker to a turn boundary, so
+    // a reply that merely mentions the word "User:" mid-sentence is not cut off.
+    return {"\nUser:", "\nAssistant:"};
+}
+
+std::size_t StopScanner::unsettled_suffix(const std::string_view text,
+                                          const std::vector<std::string>& stops) {
+    std::size_t held = 0U;
+    for (const std::string& stop : stops) {
+        if (stop.empty()) {
+            continue;
+        }
+        // A full match is the caller's business; only genuine prefixes are held.
+        const std::size_t longest_prefix = std::min(stop.size() - 1U, text.size());
+        for (std::size_t length = longest_prefix; length > held; --length) {
+            if (text.compare(text.size() - length, length, stop, 0U, length) == 0) {
+                held = length;
+                break;
+            }
+        }
+    }
+    return held;
+}
+
+std::size_t StopScanner::find(const std::string_view text, const std::vector<std::string>& stops,
+                              const std::size_t from) {
+    std::size_t earliest = std::string_view::npos;
+    for (const std::string& stop : stops) {
+        if (stop.empty()) {
+            continue;
+        }
+        const std::size_t at = text.find(stop, from);
+        if (at != std::string_view::npos && at < earliest) {
+            earliest = at;
+        }
+    }
+    return earliest;
+}
+
+std::size_t StopScanner::longest(const std::vector<std::string>& stops) {
+    std::size_t widest = 0U;
+    for (const std::string& stop : stops) {
+        widest = std::max(widest, stop.size());
+    }
+    return widest;
 }
 
 }  // namespace litemind
