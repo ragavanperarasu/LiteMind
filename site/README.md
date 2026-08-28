@@ -51,9 +51,14 @@ differently by the contents and by the anchor plugin.
 
 [`.github/workflows/docs.yml`](../.github/workflows/docs.yml) builds and
 deploys on every push to `main` that touches `docs/`, `site/` or the workflow
-itself. It needs one setting on the repository, once:
+itself. There is nothing to configure: `actions/configure-pages` runs with
+`enablement: true`, which turns Pages on and points it at Actions the first
+time the workflow runs.
 
-**Settings → Pages → Build and deployment → Source → GitHub Actions.**
+Without that flag the first run fails at that step with *"Get Pages site
+failed … Not Found"*, because Pages does not exist on a repository until
+somebody enables it. The equivalent by hand is **Settings → Pages → Build and
+deployment → Source → GitHub Actions**.
 
 There is no `gh-pages` branch and nothing is committed to the repository by the
 workflow.
