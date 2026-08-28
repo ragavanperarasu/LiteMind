@@ -88,6 +88,7 @@ add_library(litemind_core STATIC
     src/MoeRouter.cpp
     src/Sampler.cpp
     src/Tokenizer.cpp
+    src/ChatTemplate.cpp
     src/DeepSeekRunner.cpp
 )
 

@@ -2,6 +2,7 @@
 
 #include "Config.hpp"
 #include "Gemm.hpp"
+#include "ChatTemplate.hpp"
 #include "Json.hpp"
 #include "Logger.hpp"
 #include "SafeTensor.hpp"
@@ -96,6 +97,7 @@ void Cli::print_usage(const std::string& program_name) {
         "      --config PATH       Read settings from PATH instead of litemind.json.\n"
         "                          Anything else on the command line overrides it.\n"
         "      --no-plan           Skip the summary of what a prompt will cost.\n"
+        "      --no-chat           Send prompts raw, without the checkpoint's chat frame.\n"
         "      --inspect           Report what is in the model directory and exit.\n"
         "      --show-tokens       Print the token IDs the prompt encoded to.\n"
         "      --top-logits N      Print the N highest logits predicted after the\n"
@@ -334,6 +336,7 @@ bool Cli::apply_config_file(const std::filesystem::path& path, CliOptions& optio
     options.generation.sampling.seed =
         document.unsigned_or("seed", options.generation.sampling.seed);
 
+    options.chat = document.boolean_or("chat", options.chat);
     options.show_plan = document.boolean_or("show_plan", options.show_plan);
     options.show_tokens = document.boolean_or("show_tokens", options.show_tokens);
     options.prompt = document.string_or("prompt", options.prompt);
@@ -397,6 +400,8 @@ bool Cli::parse(const int argc, char* argv[], CliOptions& options, std::string& 
             }
         } else if (argument == "--no-plan") {
             options.show_plan = false;
+        } else if (argument == "--no-chat") {
+            options.chat = false;
         } else if (argument == "-q" || argument == "--quiet") {
             options.runner.verbose = false;
             options.generation.show_progress = false;
@@ -639,6 +644,22 @@ int Cli::run(const CliOptions& options) const {
                   << runner.memory_report() << "\n";
     }
 
+    // Whether prompts get the conversational frame is decided once, from the
+    // checkpoint itself: a base model has no template and is left alone.
+    const std::string& stored_template = runner.tokenizer().chat_template();
+    const bool recognised = ChatTemplate::recognise(stored_template);
+    const bool use_chat_template = options.chat && recognised;
+    if (options.runner.verbose) {
+        if (use_chat_template) {
+            std::cout << "  Chat template: applying the checkpoint's User/Assistant frame.\n\n";
+        } else if (!stored_template.empty() && !recognised) {
+            logger.warning("This checkpoint has a chat_template LiteMind does not recognise. "
+                        "Prompts are being sent unformatted, so replies may wander.");
+        } else if (!stored_template.empty() && !options.chat) {
+            std::cout << "  Chat template: present but disabled, prompts sent raw.\n\n";
+        }
+    }
+
     // A single prompt runs once; otherwise keep reading prompts from the console.
     std::vector<std::string> prompts;
     if (!options.prompt.empty()) {
@@ -665,7 +686,11 @@ int Cli::run(const CliOptions& options) const {
         } else {
             break;
         }
-        const std::vector<std::uint32_t> tokens = runner.tokenizer().encode(prompt);
+        // An instruction-tuned checkpoint expects its conversational frame. Fed a
+        // bare fragment it completes the fragment instead of answering it, which
+        // reads like a model fault rather than a formatting one.
+        const std::string formatted = use_chat_template ? ChatTemplate::apply(prompt) : prompt;
+        const std::vector<std::uint32_t> tokens = runner.tokenizer().encode(formatted);
         if (tokens.empty()) {
             logger.error("The tokenizer produced no tokens for this prompt.");
             continue;

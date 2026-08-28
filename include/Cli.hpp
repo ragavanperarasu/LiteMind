@@ -29,6 +29,14 @@ struct CliOptions final {
     /** Print the work a prompt implies before running it. */
     bool show_plan{true};
 
+    /**
+     * Wrap prompts in the checkpoint's conversational frame when it has one.
+     * A base checkpoint carries no template, so leaving this on costs nothing;
+     * turning it off feeds the prompt raw, which is what the logit comparison
+     * against a reference implementation needs.
+     */
+    bool chat{true};
+
     RunnerOptions runner{};
     GenerationOptions generation{};
 };

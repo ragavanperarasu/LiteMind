@@ -17,6 +17,9 @@
   "repeat_penalty": 1.15,
   "seed": 0,
 
+  "_chat": "An instruction-tuned checkpoint carries a chat_template in tokenizer_config.json and expects prompts wrapped in its User/Assistant frame. true applies that frame when the checkpoint has one, and does nothing when it does not. Set false to send prompts raw, which is what comparing logits against a reference implementation needs.",
+  "chat": true,
+
   "show_plan": true,
   "show_tokens": false
 }

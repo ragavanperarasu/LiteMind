@@ -360,6 +360,8 @@ void Tokenizer::load_tokenizer_config(const std::filesystem::path& directory) {
         return false;
     };
 
+    chat_template_ = document.string_or("chat_template", "");
+
     has_bos_ = resolve(document.find("bos_token"), bos_token_id_)
             && document.boolean_or("add_bos_token", true);
     static_cast<void>(resolve(document.find("eos_token"), eos_token_id_));

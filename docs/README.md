@@ -17,6 +17,7 @@ each stands on its own.
 | 10 | [Command line and settings](10-cli-and-config.md) | `litemind.json`, `run.ps1`, the flags |
 | 11 | [Testing](11-testing.md) | The suites, the synthetic model, reference logits |
 | 12 | [Performance](12-performance.md) | Measured numbers and the memory/traffic trade |
+| 13 | [The chat template](13-chat-template.md) | Why a chat checkpoint needs its User/Assistant frame |
 
 [`model-info.json`](model-info.json) is an annotated dump of the architecture
 itself — layer counts, expert counts, where the parameters sit.

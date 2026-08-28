@@ -35,6 +35,13 @@ public:
     [[nodiscard]] std::uint32_t eos_token_id() const noexcept { return eos_token_id_; }
     [[nodiscard]] bool has_bos() const noexcept { return has_bos_; }
 
+    /**
+     * The chat_template stored in tokenizer_config.json, empty on a base
+     * checkpoint. Its presence is what distinguishes an instruction-tuned
+     * checkpoint from the base model it was fine-tuned from.
+     */
+    [[nodiscard]] const std::string& chat_template() const noexcept { return chat_template_; }
+
     /** True when token_id is an added control token rather than ordinary text. */
     [[nodiscard]] bool is_special(std::uint32_t token_id) const;
 
@@ -87,6 +94,7 @@ private:
     /** Added tokens matched literally in the input, longest spelling first. */
     std::vector<std::pair<std::string, std::uint32_t>> added_tokens_;
 
+    std::string chat_template_;
     std::uint32_t bos_token_id_{};
     std::uint32_t eos_token_id_{};
     bool has_bos_{false};
