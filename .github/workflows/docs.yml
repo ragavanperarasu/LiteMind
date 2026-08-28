@@ -1,7 +1,16 @@
 # Builds the documentation website in site/ and publishes it to GitHub Pages.
 #
-# No repository setup is needed: configure-pages turns Pages on itself the
-# first time this runs. There is no gh-pages branch.
+# ONE-TIME SETUP, by hand, before the first run can deploy:
+#
+#   Settings -> Pages -> Build and deployment -> Source -> "GitHub Actions"
+#
+# It cannot be automated. configure-pages can create the Pages site with
+# `enablement: true`, but creating one needs admin rights on the repository,
+# and GITHUB_TOKEN does not have them however the permissions below are set.
+# Without that setting the run fails at configure-pages with
+# "Get Pages site failed ... Not Found".
+#
+# There is no gh-pages branch, and the workflow commits nothing.
 name: Documentation site
 
 on:
@@ -50,12 +59,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      # enablement turns Pages on and points it at Actions. Without it the
-      # first run fails with "Get Pages site failed ... Not Found", because
-      # Pages does not exist on the repository until somebody enables it.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
