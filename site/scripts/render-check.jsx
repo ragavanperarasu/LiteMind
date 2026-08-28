@@ -62,6 +62,12 @@ const index = render('#/docs', 'index');
 console.log(`index ${index.length} chars, lists all: ${docs.every((d) => index.includes(d.title))}`);
 const model = render('#/model', 'model');
 console.log(`model ${model.length} chars, has 1,664: ${model.includes('1,664')}`);
+const dev = render('#/developer', 'developer');
+console.log(`dev   ${dev.length} chars, all links: ${
+  ['https://ragavan.vercel.app/', 'https://www.linkedin.com/in/ragavandevp', 'https://gct.ac.in/',
+   'https://play.google.com/store/apps/details?id=com.mygcthub', 'https://mygct.org/',
+   'https://store.mygct.org/', 'https://slides.mygct.org/'].every((u) => dev.includes(u))
+}`);
 const missing = render('#/nope', 'missing');
 console.log(`404   ${missing.length} chars, says so: ${missing.includes('No such page')}`);
 
@@ -80,7 +86,7 @@ for (const doc of docs) {
 
 // Every link the renderer produces must be absolute or a route that exists.
 const ids = new Set(docs.map((d) => d.id));
-const known = new Set(['#/', '#/docs', '#/model']);
+const known = new Set(['#/', '#/docs', '#/model', '#/developer']);
 for (const doc of docs) {
   const html = renderMarkdown(doc.markdown, doc.id);
   for (const match of html.matchAll(/href="([^"]+)"/g)) {

@@ -11,6 +11,7 @@ import {
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import GridViewRoundedIcon from '@mui/icons-material/GridViewRounded';
 import HubRoundedIcon from '@mui/icons-material/HubRounded';
+import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import { sections } from '../lib/content.js';
 import { routes } from '../lib/router.js';
 import { site } from '../lib/site.js';
@@ -28,6 +29,12 @@ const shortcuts = [
     href: routes.model,
     icon: HubRoundedIcon,
     match: (r) => r.view === 'model',
+  },
+  {
+    label: 'Developer',
+    href: routes.developer,
+    icon: PersonRoundedIcon,
+    match: (r) => r.view === 'developer',
   },
 ];
 

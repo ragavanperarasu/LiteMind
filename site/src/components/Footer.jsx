@@ -31,6 +31,9 @@ export default function Footer() {
           <Link href={routes.model} variant="body2" underline="hover" color="text.secondary">
             Model spec
           </Link>
+          <Link href={routes.developer} variant="body2" underline="hover" color="text.secondary">
+            Developer
+          </Link>
           <Link
             href={sourceUrl('docs')}
             target="_blank"

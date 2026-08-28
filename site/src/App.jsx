@@ -11,6 +11,7 @@ import Home from './views/Home.jsx';
 import DocsIndex from './views/DocsIndex.jsx';
 import DocPage from './views/DocPage.jsx';
 import ModelSpec from './views/ModelSpec.jsx';
+import Developer from './views/Developer.jsx';
 import NotFound from './views/NotFound.jsx';
 import { docsById } from './lib/content.js';
 import { useRoute } from './lib/router.js';
@@ -70,13 +71,16 @@ export default function App() {
       ? `${doc.rawTitle} — LiteMind`
       : route.view === 'model'
         ? 'Model specification — LiteMind'
-        : 'LiteMind — mixture-of-experts inference on the CPU';
+        : route.view === 'developer'
+          ? 'Developer — LiteMind'
+          : 'LiteMind — mixture-of-experts inference on the CPU';
   }, [route]);
 
   const content = (() => {
     if (route.view === 'home') return <Home />;
     if (route.view === 'index') return <DocsIndex />;
     if (route.view === 'model') return <ModelSpec />;
+    if (route.view === 'developer') return <Developer />;
     if (route.view === 'doc') {
       const doc = docsById.get(route.id);
       return doc ? (

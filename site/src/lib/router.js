@@ -12,6 +12,7 @@ export function parseRoute(hash) {
 
   if (parts.length === 0) return { view: 'home' };
   if (parts[0] === 'model') return { view: 'model' };
+  if (parts[0] === 'developer') return { view: 'developer' };
   if (parts[0] === 'docs') {
     if (parts.length === 1) return { view: 'index' };
     return { view: 'doc', id: parts[1], anchor: parts[2] || null };
@@ -41,5 +42,6 @@ export const routes = {
   home: '#/',
   index: '#/docs',
   model: '#/model',
+  developer: '#/developer',
   doc: (id, anchor) => `#/docs/${id}${anchor ? `/${anchor}` : ''}`,
 };

@@ -32,6 +32,25 @@ Setup and prerequisites, the architecture one page at a time, the measured
 numbers, the command line, and troubleshooting. The site is built from
 [`docs/`](docs/README.md), which reads just as well here on GitHub.
 
+## Developer
+
+**Ragavan M** — full-stack and mobile app developer. B.E. Computer Science and
+Engineering, [Government College of Technology, Coimbatore](https://gct.ac.in/).
+
+[Portfolio](https://ragavan.vercel.app/) ·
+[LinkedIn](https://www.linkedin.com/in/ragavandevp) ·
+[GitHub](https://github.com/ragavanperarasu) ·
+[Profile on the docs site](https://ragavanperarasu.github.io/LiteMind/#/developer)
+
+Other work — **My GCT**, a set of tools for students at the same college:
+
+| | |
+|---|---|
+| [My GCT Hub](https://play.google.com/store/apps/details?id=com.mygcthub) | Question papers, notes and syllabus, on Google Play |
+| [My GCT](https://mygct.org/) | The same material on the web |
+| [My GCT Store](https://store.mygct.org/) | Where students publish and download each other's apps, sites and tools |
+| [My GCT Slides](https://slides.mygct.org/) | Share slides with a four-digit code — no app, no login |
+
 ## License
 
 MIT. See [`LICENSE`](LICENSE). The model weights are
