@@ -9,6 +9,14 @@ Built and tested against
 [deepseek-ai/DeepSeek-V2-Lite](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite)
 (15.7 B parameters, 2.4 B active per token).
 
+**[Full documentation is in `docs/`](docs/README.md)** — one page per part:
+[loading](docs/02-loading.md), [tokenizer](docs/03-tokenizer.md),
+[attention](docs/04-attention.md), [rotary embedding](docs/05-rope.md),
+[mixture of experts](docs/06-mixture-of-experts.md),
+[expert cache](docs/07-expert-cache.md), [kernels](docs/08-kernels.md),
+[sampling](docs/09-sampling.md), [the CLI](docs/10-cli-and-config.md),
+[testing](docs/11-testing.md) and [performance](docs/12-performance.md).
+
 ---
 
 ## What happens when you type a prompt
@@ -203,6 +211,11 @@ Enter prompt (/exit to quit)> The capital of France is
 
 Those figures come from `config.json`, not from a measurement, so they are
 available before the work starts. They match what the run then reports.
+
+[`docs/model-info.json`](docs/model-info.json) is an annotated breakdown of the
+model itself — layer counts, expert counts, what multi-head latent attention
+stores, where the 15.7 B parameters sit and which 2.4 B of them run per token.
+It is documentation; nothing reads it.
 
 The command line still works and always wins over the settings file, which is
 what makes it useful for one-off comparisons:

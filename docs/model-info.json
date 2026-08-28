@@ -1,0 +1,110 @@
+{
+  "_about": "What LiteMind is running: DeepSeek-V2-Lite. Every number here is derived from config.json, not measured, and matches what `LiteMind.exe models --inspect` reports. This file is documentation only - nothing reads it.",
+  "identity": {
+    "_note": "A mixture-of-experts model: it holds 15.7 billion parameters but runs only 2.4 billion of them for any one token. That gap is the whole reason this project works on a laptop.",
+    "name": "deepseek-ai/DeepSeek-V2-Lite",
+    "architecture": "DeepseekV2ForCausalLM",
+    "kind": "base model - it continues text, it does not answer questions",
+    "weight_type": "BF16",
+    "checkpoint_shards": 4,
+    "checkpoint_tensors": 5291,
+    "checkpoint_size_gib": 29.3
+  },
+  "layers": {
+    "_note": "27 decoder layers. Layer 0 is a normal dense feed-forward layer; the other 26 replace it with a mixture of experts.",
+    "total": 27,
+    "dense": 1,
+    "mixture_of_experts": 26,
+    "hidden_size": 2048,
+    "norms_per_layer": 2
+  },
+  "experts": {
+    "_note": "This is the number that matters. Each MoE layer holds 64 routed experts, but the router picks only 6 of them per token. 2 shared experts run for every token regardless.",
+    "routed_per_layer": 64,
+    "selected_per_layer_per_token": 6,
+    "shared_per_layer": 2,
+    "selected_fraction_percent": 9.4,
+    "routed_experts_in_model": 1664,
+    "expert_executions_per_token": 156,
+    "one_expert": {
+      "_note": "Three matrices - gate, up and down - forming one SwiGLU feed-forward block.",
+      "matrices": 3,
+      "intermediate_size": 1408,
+      "parameters": 8650752,
+      "size_mib": 16.5
+    },
+    "routing": {
+      "_note": "Softmax runs over all 64 experts BEFORE the top-6 cut. norm_topk_prob is false, so the six weights are raw probabilities that deliberately do not sum to one.",
+      "method": "greedy top-k",
+      "norm_topk_prob": false,
+      "routed_scaling_factor": 1.0
+    }
+  },
+  "attention": {
+    "_note": "Multi-head latent attention. Keys and values are not stored per head; the hidden state is compressed to a kv_lora_rank latent and expanded by kv_b_proj. The rotary part of the key is decoupled - one vector shared by all heads.",
+    "heads": 16,
+    "kv_lora_rank": 512,
+    "q_lora_rank": 0,
+    "q_lora_note": "0 means q_proj is a single dense matrix",
+    "qk_nope_head_dim": 128,
+    "qk_rope_head_dim": 64,
+    "qk_head_dim_total": 192,
+    "v_head_dim": 128,
+    "softmax_scale": 0.114721,
+    "parameters_per_layer": 13762560
+  },
+  "positional_encoding": {
+    "_note": "YaRN-scaled rotary embedding. DeepSeek reshapes the rotary channels from [d] to [d/2, 2] and transposes before rotating; rotating the raw interleaved layout pairs the wrong channels and produces fluent-looking noise.",
+    "type": "yarn",
+    "rope_theta": 10000,
+    "factor": 40,
+    "original_max_position_embeddings": 4096,
+    "max_position_embeddings": 163840,
+    "mscale": 0.707,
+    "mscale_all_dim": 0.707
+  },
+  "vocabulary": {
+    "_note": "Byte-level BPE. The tokenizer holds two more entries than config.json declares, which are added special tokens.",
+    "vocab_size": 102400,
+    "tokenizer_entries": 100002,
+    "bos_token_id": 100000,
+    "eos_token_id": 100001
+  },
+  "parameters": {
+    "_note": "Only 15.6% of the model runs per token. Everything except the routed experts is active every step.",
+    "total": 15706470400,
+    "total_billions": 15.71,
+    "active_per_token": 2451423232,
+    "active_per_token_billions": 2.45,
+    "active_percent": 15.6,
+    "breakdown_total": {
+      "embeddings": 209715200,
+      "output_head": 209715200,
+      "attention_all_layers": 371589120,
+      "dense_feed_forward": 67239936,
+      "routed_experts": 14394851328,
+      "shared_experts": 449839104,
+      "router_gates": 3407872
+    }
+  },
+  "memory": {
+    "_note": "The always-hot part is touched every step and the OS keeps it resident. The routed experts are what streaming exists for.",
+    "always_hot_gib": 2.44,
+    "routed_experts_gib": 26.81,
+    "kv_cache": {
+      "_note": "float32, stored expanded rather than as the latent. key_rope is one vector shared by all heads, which is why it is not multiplied by the head count.",
+      "floats_per_layer_per_position": 4160,
+      "bytes_per_position": 449280,
+      "kib_per_position": 438.75,
+      "mib_at_1024_positions": 438.75
+    }
+  },
+  "per_token_cost": {
+    "_note": "What one generated token costs. Multiply by (prompt tokens + generated tokens) for a whole run - prefill is sequential, so a prompt token costs the same as a generated one.",
+    "expert_executions": 156,
+    "expert_weight_reads_bytes": 2699034624,
+    "expert_weight_reads_gib": 2.51,
+    "minimum_useful_expert_cache_gib": 2.51,
+    "minimum_useful_expert_cache_note": "A single token touches this much of the expert weights. An --expert-cache budget below it evicts every expert before it can be reused, giving a 0% hit rate by construction."
+  }
+}
