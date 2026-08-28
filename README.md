@@ -9,7 +9,10 @@ Built and tested against
 [deepseek-ai/DeepSeek-V2-Lite](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite)
 (15.7 B parameters, 2.4 B active per token).
 
-**[Full documentation is in `docs/`](docs/README.md)** — one page per part:
+**[Read the documentation as a website](https://ragavanperarasu.github.io/LiteMind/)**
+— searchable, cross-linked, built from `docs/` by [`site/`](site/).
+
+**[Or read the same pages in `docs/`](docs/README.md)** — one page per part:
 [loading](docs/02-loading.md), [tokenizer](docs/03-tokenizer.md),
 [attention](docs/04-attention.md), [rotary embedding](docs/05-rope.md),
 [mixture of experts](docs/06-mixture-of-experts.md),

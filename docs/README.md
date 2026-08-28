@@ -1,5 +1,9 @@
 # LiteMind documentation
 
+**These pages are also a website: https://ragavanperarasu.github.io/LiteMind/**
+— same content, with search, a contents rail and syntax highlighting. It is
+built from this directory by [`site/`](../site).
+
 One page per part of the system. Read them in order the first time; after that
 each stands on its own.
 

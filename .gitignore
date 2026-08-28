@@ -35,4 +35,9 @@ __pycache__/
 /ui/web/node_modules/
 /ui/web/dist/
 
+# Documentation website build output and packages
+/site/node_modules/
+/site/dist/
+/site/check-out/
+
 node_modules

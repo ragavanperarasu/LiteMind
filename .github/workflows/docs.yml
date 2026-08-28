@@ -1,0 +1,67 @@
+# Builds the documentation website in site/ and publishes it to GitHub Pages.
+#
+# One-time setup in the repository: Settings → Pages → Build and deployment →
+# Source → "GitHub Actions". Nothing else; there is no gh-pages branch.
+name: Documentation site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'site/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+# Pages deployment needs these; the default GITHUB_TOKEN cannot publish without them.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A queued run replaces a queued run, but never cancels one that is mid-deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Renders every route in Node. Catches a page that throws, markdown that
+      # failed to load, and contents links pointing at anchors that do not exist.
+      - name: Check
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
