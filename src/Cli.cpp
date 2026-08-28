@@ -85,7 +85,7 @@ void Cli::print_usage(const std::string& program_name) {
         "\n"
         "Memory and speed:\n"
         "  -t, --threads N         Worker threads (default: one per core).\n"
-        "      --expert-cache GB   Cap the resident routed experts at GB gigabytes.\n"
+        "      --expert-cache GB   Copy routed experts into a bounded GB-gigabyte arena.\n"
         "                          Experts above the cap are returned to the SSD.\n"
         "                          Omit this to let the operating system decide.\n"
         "      --warm              Stream the always-hot weights in before the\n"

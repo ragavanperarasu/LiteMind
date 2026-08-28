@@ -19,6 +19,7 @@ litemind_add_test(SafeTensorTest)
 litemind_add_test(KernelTest)
 litemind_add_test(RopeTest)
 litemind_add_test(MoeRouterSamplerTest)
+litemind_add_test(ExpertCacheTest)
 litemind_add_test(AttentionTest)
 
 # These read the real tokenizer, so they are registered only when it is present.

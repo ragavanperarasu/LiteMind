@@ -38,8 +38,9 @@ This is the flow the project is built around.
       |
       +-- EXECUTE ON CPU  SwiGLU, multi-threaded BF16 kernels
       |
-      +-- RELEASE TO SSD  once the resident set passes --expert-cache,
-      |                   the least recently used experts are dropped
+      +-- RELEASE TO SSD  under --expert-cache the expert is copied into a
+      |                   fixed arena and the file pages are dropped; the
+      |                   least recently used expert is evicted to make room
       v
   [4] SAMPLE              greedy by default, or temperature / top-k / top-p
       |
@@ -164,25 +165,45 @@ powershell -ExecutionPolicy Bypass -File scripts\download_model.ps1 -Destination
 
 ## Memory
 
-Nothing is copied out of the mapping except the norm vectors and the router
-gates, which together are a few tens of megabytes.
+By default nothing is copied out of the mapping except the norm vectors and the
+router gates, which together are a few tens of megabytes. `--expert-cache`
+changes that for the routed experts; see below.
 
 | What | Size (V2-Lite) | Where it lives |
 |---|---|---|
 | Embeddings and output head | ~840 MB | mapped, touched every step |
 | Attention, all 27 layers | ~740 MB | mapped, touched every step |
 | Shared experts and the dense layer | ~1.0 GB | mapped, touched every step |
-| **Routed experts** | **~29 GB** | **mapped, ~10% touched per token** |
+| **Routed experts** | **~29 GB** | **mapped, ~10% touched per token; copied into the arena under `--expert-cache`** |
 | Norms and router gates | ~15 MB | copied to RAM as float32 |
 | KV cache | ~450 KB per position | RAM |
 
 So the always-hot part is roughly 2.6 GB, and the 29 GB of routed experts is
 what streaming exists for.
 
-`--expert-cache N` caps the resident routed experts at N gigabytes. Above the
-cap, the least recently used experts are released back to the SSD. Without the
-flag, residency is left to the operating system's page cache, which is the
-better choice when there is enough RAM.
+`--expert-cache N` caps the resident routed experts at N gigabytes, and the cap
+is a real one. An arena of N gigabytes is allocated once at load. Each expert
+the router selects is copied into it and the file pages are released
+immediately, so an expert is never held twice; when the arena is full, the
+least recently used expert is evicted to make room. Eviction is bookkeeping in
+memory LiteMind owns, so the ceiling holds regardless of what the operating
+system decides to cache.
+
+Without the flag nothing is copied. Views address the mapping directly and
+residency is left to the page cache, which is faster when the machine has
+enough RAM to hold the working set anyway — there is no copy to pay for, and no
+budget to enforce.
+
+The two paths produce identical output. A smaller budget buys lower peak memory
+with more SSD traffic, and nothing else:
+
+```powershell
+.\build\bin\LiteMind.exe models -p "The capital of France is" -n 16 --expert-cache 8
+.\build\bin\LiteMind.exe models -p "The capital of France is" -n 16 --expert-cache 2
+```
+
+The `Experts:` line at the end of each run reports the hit rate and the bytes
+read, which is where that trade shows up.
 
 The KV cache is the one thing that scales with context rather than with the
 model, at about 450 KB per position across all layers. `--context` defaults to
@@ -442,7 +463,7 @@ layer's output magnitude.
 | `src/MappedFile.cpp` | Cross-platform mmap with prefetch and release hints |
 | `src/SafeTensor.cpp` | Maps one shard and parses its header |
 | `src/WeightStore.cpp` | Resolves a tensor name to a pointer, enforcing shape and dtype |
-| `src/ExpertCache.cpp` | The bounded expert working set: load, execute, release |
+| `src/ExpertCache.cpp` | The bounded expert working set: a fixed-slot RAM arena with LRU eviction |
 | `src/Gemm.cpp` | BF16 kernels, hand-vectorised for AVX2 with a portable fallback |
 | `src/Threading.cpp` | A fixed thread pool with a blocking `parallel_for` |
 | `src/Rope.cpp` | YaRN rotary embedding with DeepSeek's channel permutation |
@@ -459,7 +480,8 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 `JsonTest`, `SafeTensorTest`, `KernelTest`, `RopeTest`,
-`MoeRouterSamplerTest` and `AttentionTest` need no model files.
+`MoeRouterSamplerTest`, `ExpertCacheTest` and `AttentionTest` need no model
+files.
 `TokenizerRoundTrip` runs only when `models/tokenizer.json` is present.
 
 ---

@@ -2,29 +2,32 @@
 
 #include "WeightStore.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <list>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
 namespace litemind {
 
 /**
- * @brief Keeps a bounded working set of mixture-of-experts weights in RAM.
+ * @brief Holds a bounded working set of mixture-of-experts weights in RAM.
  *
  * DeepSeek-V2-Lite holds 64 routed experts per layer but sends each token to
  * six of them, so roughly a tenth of the expert weights are needed to decode
  * any one token. This class turns that property into a memory budget.
  *
- * Nothing is copied. An expert is "resident" when its pages have been streamed
- * in from the SSD through the shard's memory mapping, and it is evicted by
- * telling the operating system those pages may go back. Reading an evicted
- * expert is still correct; it simply faults the pages in again. The budget
- * therefore trades SSD traffic against RAM without ever changing the result.
+ * With a budget set, the six experts the router asked for are *copied* out of
+ * the memory mapping into an arena this class owns, and the compute runs
+ * against that copy. The file pages are released immediately afterwards, so an
+ * expert is never counted against RAM twice. The arena is allocated once and
+ * never grows, which is what makes the budget a ceiling rather than a request:
+ * eviction is ours to decide, not the operating system's.
  *
- * A zero budget disables the bookkeeping entirely and leaves residency to the
- * operating system's own page cache, which is the right choice when the machine
- * has enough RAM to hold the whole checkpoint.
+ * With no budget, nothing is copied. Views address the mapping directly and
+ * residency is left to the operating system's page cache, which is the faster
+ * choice when the machine has enough RAM to hold the working set anyway.
  */
 class ExpertCache final {
 public:
@@ -45,16 +48,34 @@ public:
     void configure(std::uint64_t budget_bytes) noexcept;
 
     /**
-     * Marks an expert as needed now, streaming it in and evicting the
-     * least-recently-used experts if that pushes the working set over budget.
+     * Allocates the arena from a representative expert block, so the capacity is
+     * known before the first prompt rather than part-way through it.
+     *
+     * Every routed expert in a DeepSeek-V2 model has the same shape, so one slot
+     * size serves all of them. Returns false when the budget cannot hold even a
+     * single expert, in which case the cache degrades to advisory paging hints.
      */
-    void touch(std::uint64_t key, const Block& block);
+    bool reserve(const Block& representative);
 
-    /** Evicts everything and returns the working set to zero. */
+    /**
+     * Marks an expert as needed now and returns the block to compute with.
+     *
+     * When the arena is active the expert is copied in, evicting the
+     * least-recently-used experts to make room, and the returned block addresses
+     * that copy. Otherwise the block is returned unchanged and reads go through
+     * the memory mapping as before.
+     */
+    [[nodiscard]] Block touch(std::uint64_t key, const Block& block);
+
+    /** Returns every expert to the free list. The arena itself is kept. */
     void clear();
 
     [[nodiscard]] bool enabled() const noexcept { return budget_bytes_ != 0U; }
+    /** True once an arena is allocated, meaning experts are copied into RAM. */
+    [[nodiscard]] bool copying() const noexcept { return capacity_ != 0U; }
     [[nodiscard]] std::uint64_t budget_bytes() const noexcept { return budget_bytes_; }
+    [[nodiscard]] std::uint64_t arena_bytes() const noexcept { return arena_bytes_; }
+    [[nodiscard]] std::size_t capacity_experts() const noexcept { return capacity_; }
     [[nodiscard]] std::uint64_t resident_bytes() const noexcept { return resident_bytes_; }
     [[nodiscard]] std::size_t resident_experts() const noexcept { return entries_.size(); }
 
@@ -69,16 +90,42 @@ public:
     }
 
 private:
+    /** Byte offsets of the three matrices inside one arena slot. */
+    struct SlotLayout final {
+        std::uint64_t gate_offset{};
+        std::uint64_t gate_bytes{};
+        std::uint64_t up_offset{};
+        std::uint64_t up_bytes{};
+        std::uint64_t down_offset{};
+        std::uint64_t down_bytes{};
+        std::uint64_t stride{};
+    };
+
     struct Entry final {
-        Block block;
+        Block resident;
+        std::size_t slot{};
         std::uint64_t bytes{};
         std::list<std::uint64_t>::iterator position;
     };
+
+    /** True when a block has exactly the shape the arena was laid out for. */
+    [[nodiscard]] bool fits(const Block& block) const noexcept;
+
+    /** Copies one matrix into a slot and returns a view addressing the copy. */
+    [[nodiscard]] WeightView copy_into(const WeightView& source, std::size_t slot,
+                                       std::uint64_t offset);
 
     void evict_oldest();
 
     std::uint64_t budget_bytes_{};
     std::uint64_t resident_bytes_{};
+
+    std::unique_ptr<std::byte[]> arena_;
+    std::uint64_t arena_bytes_{};
+    std::size_t capacity_{};
+    SlotLayout layout_{};
+    std::vector<std::size_t> free_slots_;
+
     std::list<std::uint64_t> recency_;  ///< Most recently used at the front.
     std::unordered_map<std::uint64_t, Entry> entries_;
 

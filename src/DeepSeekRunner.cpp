@@ -275,11 +275,17 @@ bool DeepSeekRunner::Impl::forward(const std::uint32_t token_id, const std::size
             router.select(router_logits, selection);
 
             for (const ExpertSelection& choice : selection) {
-                const FeedForwardWeights& expert = weights.experts[choice.expert_index];
-                // Declare the expert needed before touching it, so the cache can
-                // stream it in and make room by evicting a colder one.
-                experts.touch(ExpertCache::make_key(layer, choice.expert_index),
-                              ExpertCache::Block{expert.gate, expert.up, expert.down});
+                FeedForwardWeights expert = weights.experts[choice.expert_index];
+                // Declare the expert needed before computing with it. Under a
+                // budget this copies it into the cache's own arena, evicting a
+                // colder expert to make room, and returns views onto that copy;
+                // otherwise the mapped views come back unchanged.
+                const ExpertCache::Block resident =
+                    experts.touch(ExpertCache::make_key(layer, choice.expert_index),
+                                  ExpertCache::Block{expert.gate, expert.up, expert.down});
+                expert.gate = resident.gate;
+                expert.up = resident.up;
+                expert.down = resident.down;
                 feed_forward(expert, normalised.data(), feed_forward_output.data(), choice.weight);
             }
             if (config.n_shared_experts != 0U) {
@@ -395,6 +401,23 @@ bool DeepSeekRunner::load(const std::filesystem::path& model_directory, const Ru
     }
     if (options.verbose) {
         std::cout << "\r  Resolving weights: " << config.num_hidden_layers << " layers ready.        \n";
+    }
+
+    // Allocate the expert arena now, from a resolved expert, so its capacity is
+    // known before the first prompt instead of appearing part-way through one.
+    if (state.experts.enabled()) {
+        for (const LayerWeights& layer : state.layers) {
+            if (!layer.mixture_of_experts || layer.experts.empty()) {
+                continue;
+            }
+            const FeedForwardWeights& first = layer.experts.front();
+            if (!state.experts.reserve(ExpertCache::Block{first.gate, first.up, first.down}) &&
+                options.verbose) {
+                std::cout << "  Expert budget is smaller than one expert; residency falls back "
+                             "to the page cache.\n";
+            }
+            break;
+        }
     }
 
     state.hot_bytes = state.store.statistics().mapped_bytes - state.expert_bytes;
@@ -574,6 +597,12 @@ std::string DeepSeekRunner::memory_report() const {
 
     if (state.experts.enabled()) {
         text << "  Expert budget:       " << format_bytes(state.experts.budget_bytes());
+        if (state.experts.copying()) {
+            text << " copied into RAM, room for " << state.experts.capacity_experts()
+                 << " expert(s)";
+        } else {
+            text << " (too small for one expert; left to the page cache)";
+        }
         // Before the first prompt there is no traffic to report, and printing a
         // row of zeroes only looks like something went wrong.
         if (state.experts.loads() + state.experts.hits() == 0U) {
