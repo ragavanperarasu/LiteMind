@@ -2,7 +2,7 @@
   "_comment": "LiteMind settings. Change values here instead of typing flags. Anything passed on the command line overrides this file.",
 
   "model": "models",
-  "max_tokens": 32,
+  "max_tokens": 500,
   "context": 1024,
   "threads": 0,
 
@@ -10,11 +10,11 @@
   "expert_cache_gb": 0,
   "warm": false,
 
-  "_sampling": "temperature 0 means greedy decoding, which is reproducible. Set it above 0 to sample, and top_k / top_p then apply.",
-  "temperature": 0,
+  "_sampling": "temperature 0 means greedy decoding, which is reproducible but on a base model collapses into a repetition loop over a few hundred tokens. 0.7 with a repeat_penalty above 1 keeps long generations moving.",
+  "temperature": 0.7,
   "top_k": 40,
   "top_p": 0.95,
-  "repeat_penalty": 1.0,
+  "repeat_penalty": 1.15,
   "seed": 0,
 
   "show_plan": true,
