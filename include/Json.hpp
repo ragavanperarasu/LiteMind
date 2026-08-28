@@ -67,4 +67,34 @@ private:
     friend class JsonParser;
 };
 
+/**
+ * @brief Builds a JSON object one field at a time.
+ *
+ * The parser above reads configuration; this writes machine-readable output for
+ * a caller that is not a person - the HTTP backend streams these, one object
+ * per line, rather than scraping the console formatting, which exists to be
+ * read and is free to change.
+ *
+ * Deliberately minimal: flat objects of scalars, which is all the event stream
+ * needs. Nesting would mean a value type, and there is nothing to nest.
+ */
+class JsonWriter final {
+public:
+    JsonWriter& text(std::string_view key, std::string_view value);
+    JsonWriter& number(std::string_view key, double value);
+    JsonWriter& integer(std::string_view key, std::uint64_t value);
+    JsonWriter& boolean(std::string_view key, bool value);
+
+    /** Closes the object and returns it. The writer is empty again afterwards. */
+    [[nodiscard]] std::string take();
+
+    /** Quotes and escapes one string, for building a value by hand. */
+    [[nodiscard]] static std::string quote(std::string_view text);
+
+private:
+    void separate();
+
+    std::string buffer_;
+};
+
 }  // namespace litemind

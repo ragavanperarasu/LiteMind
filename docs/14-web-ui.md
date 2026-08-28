@@ -1,0 +1,119 @@
+# 14 · The web interface
+
+**Source:** [`ui/server/`](../ui/server/), [`ui/web/`](../ui/web/)
+**Launcher:** [`scripts/ui.ps1`](../scripts/ui.ps1)
+
+```
+browser  ──HTTP──▶  Node (node:http)  ──spawn──▶  LiteMind.exe --json
+   ▲                                                      │
+   └──────── server-sent events ◀── newline JSON ──────────┘
+```
+
+## Running it
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\ui.ps1
+```
+
+That builds the engine, installs the interface packages on first run, builds the
+bundle and serves everything on <http://localhost:5174>. `-Dev` runs the Vite dev
+server with hot reload instead; `-SkipBuild` leaves the C++ alone.
+
+## Why the engine emits JSON
+
+The console report exists to be read by a person, and it changes whenever the
+wording improves. A program that scraped it would break on a reworded heading, a
+renamed column or a progress bar drawn with carriage returns.
+
+So `--json` gives the same information as a stream of objects, one per line:
+
+| Event | When | Carries |
+|---|---|---|
+| `ready` | after the checkpoint loads | architecture, context, whether a chat template applies |
+| `plan` | before each prompt runs | token counts, expert counts, parameter counts |
+| `token` | per decoded fragment | the text |
+| `done` | when the reply ends | timings, throughput, stop reason |
+| `error` | on failure | the message |
+
+`--json` also silences the report, because both would otherwise be writing to
+stdout at once.
+
+### The output has to be valid UTF-8
+
+JSON is defined over Unicode text, but what reaches the writer is model output,
+and a byte-level tokenizer can emit any byte at all. A truncated sequence or a
+stray continuation byte would produce a document no parser will accept, killing a
+reply mid-stream for a reason nowhere near where it appears.
+
+`JsonWriter::quote` therefore validates as it escapes, rejecting over-long forms,
+surrogate halves and anything past U+10FFFF, and substituting U+FFFD. Malformed
+bytes become visible replacement characters rather than a broken stream.
+
+## Why a process per request
+
+A 29.3 GiB checkpoint sounds far too expensive to load per request. It is not:
+the weights are memory mapped, so a load costs about a third of a second, and the
+expert pages stay in the operating system's cache between processes — the same
+mechanism that makes streaming work at all.
+
+What it buys is that a cancelled request leaves nothing behind. Killing the
+process resets the KV cache, the sampler and the expert residency together, with
+no state to unwind by hand.
+
+Requests are serialised. The engine already spreads one token across every core,
+so two prompts at once would halve the threads available to each and make both
+slower than running them in turn. A second request gets `409` rather than
+competing for the cores.
+
+## Why the backend has no packages
+
+The engine's claim is that it has no third-party dependencies. The two lines of
+routing here do not justify spending that claim on Express, so the server is
+`node:http` and nothing else.
+
+The browser bundle is a different matter. Material UI *is* a dependency, and
+React and Vite come with it — but that is a property of the interface, not of the
+inference engine, which is unchanged and still builds and runs with no packages
+at all. `scripts\run.ps1` remains the dependency-free path.
+
+## Streaming, twice
+
+The reply crosses two boundaries, and both can split a multi-byte character:
+
+1. **Engine → Node**, over a pipe that breaks wherever the buffer ends.
+2. **Node → browser**, over a network that breaks wherever a packet ends.
+
+Both sides keep a `TextDecoder` across chunks with `{ stream: true }`, so a
+character split across a boundary is held until it is complete. Decoding per
+chunk instead would corrupt any reply that is not pure ASCII — which is to say
+any reply in Chinese, or containing an emoji or a dash.
+
+Server-sent events carry it over the second hop. It is the one streaming
+transport that needs no library on either end. `EventSource` cannot be used
+directly because it only issues GET requests and a prompt needs a POST body, so
+the response body is read and split by hand — the framing is identical.
+
+## What the interface shows
+
+Alongside the answer, the plan panel restates the cost of the prompt, because
+those numbers are easy to misread. `26 layers × 6 experts = 156 per token` and
+`79,248 expert executions` invite the conclusion that 79,248 experts get loaded.
+They do not: there are only **1,664** routed experts in the whole model, and the
+executions reuse them roughly forty-eight times each.
+
+The panel names the pool size and the reuse factor next to the execution count
+for exactly that reason, and swaps the planned ceilings for what the reply
+actually cost once it finishes.
+
+## Endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/health` | Is the engine built, is a checkpoint present, is one running |
+| `GET` | `/api/settings` | `litemind.json`, without its comment keys |
+| `PUT` | `/api/settings` | Merge changes in, preserving the comments |
+| `POST` | `/api/generate` | Run a prompt, streaming events back |
+| `POST` | `/api/cancel` | Kill the running generation |
+
+Settings are read from and written to the same `litemind.json` the command line
+uses, so a change made in the browser applies to `scripts\run.ps1` and back.

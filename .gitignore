@@ -30,3 +30,9 @@ Testing/
 # Python bytecode from the tools directory
 __pycache__/
 *.pyc
+
+# Web interface build output and packages
+/ui/web/node_modules/
+/ui/web/dist/
+
+node_modules

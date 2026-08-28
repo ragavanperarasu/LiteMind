@@ -1,6 +1,8 @@
 #include "Json.hpp"
 
 #include <cerrno>
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -376,6 +378,165 @@ bool Json::boolean_or(const std::string_view key, const bool fallback) const {
 std::string Json::string_or(const std::string_view key, const std::string_view fallback) const {
     const Json* member = find(key);
     return (member != nullptr && member->is_string()) ? member->string_ : std::string(fallback);
+}
+
+// ── Writing ──────────────────────────────────────────────────────────────────
+
+namespace {
+
+/**
+ * How many bytes the UTF-8 sequence starting at index occupies, or zero when
+ * the bytes there are not a valid sequence.
+ *
+ * JSON must be valid UTF-8, and what reaches the writer is model output: a
+ * byte-level tokenizer can emit any byte at all, so a stray continuation byte
+ * or a truncated sequence is possible and must not be passed through. The
+ * over-long, surrogate and out-of-range forms are rejected too, since they are
+ * ill-formed UTF-8 even though their lead bytes look plausible.
+ */
+[[nodiscard]] std::size_t utf8_sequence_length(const std::string_view text,
+                                               const std::size_t index) {
+    const auto byte = [&](const std::size_t offset) {
+        return static_cast<unsigned char>(text[index + offset]);
+    };
+    const auto continuation = [&](const std::size_t offset) {
+        return index + offset < text.size() && (byte(offset) & 0xC0U) == 0x80U;
+    };
+
+    const unsigned char lead = byte(0U);
+    if (lead < 0x80U) {
+        return 1U;
+    }
+    if (lead >= 0xC2U && lead <= 0xDFU) {
+        return continuation(1U) ? 2U : 0U;
+    }
+    if (lead >= 0xE0U && lead <= 0xEFU) {
+        if (!continuation(1U) || !continuation(2U)) {
+            return 0U;
+        }
+        const unsigned char second = byte(1U);
+        // E0 80.. would be over-long; ED A0.. is a surrogate half.
+        if (lead == 0xE0U && second < 0xA0U) {
+            return 0U;
+        }
+        if (lead == 0xEDU && second >= 0xA0U) {
+            return 0U;
+        }
+        return 3U;
+    }
+    if (lead >= 0xF0U && lead <= 0xF4U) {
+        if (!continuation(1U) || !continuation(2U) || !continuation(3U)) {
+            return 0U;
+        }
+        const unsigned char second = byte(1U);
+        // F0 80.. is over-long; anything past F4 8F.. is beyond U+10FFFF.
+        if (lead == 0xF0U && second < 0x90U) {
+            return 0U;
+        }
+        if (lead == 0xF4U && second >= 0x90U) {
+            return 0U;
+        }
+        return 4U;
+    }
+    return 0U;
+}
+
+}  // namespace
+
+std::string JsonWriter::quote(const std::string_view text) {
+    std::string out;
+    out.reserve(text.size() + 2U);
+    out.push_back('"');
+    for (std::size_t index = 0U; index < text.size();) {
+        const std::size_t width = utf8_sequence_length(text, index);
+        if (width == 0U) {
+            // U+FFFD REPLACEMENT CHARACTER, one per bad byte, so the output
+            // stays valid without silently dropping anything.
+            out += "\xEF\xBF\xBD";
+            ++index;
+            continue;
+        }
+        if (width > 1U) {
+            out.append(text, index, width);
+            index += width;
+            continue;
+        }
+        const char character = text[index];
+        ++index;
+        switch (character) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            case '\b': out += "\\b"; break;
+            case '\f': out += "\\f"; break;
+            default:
+                // Everything below space must be escaped; UTF-8 bytes above it
+                // are already valid JSON and are passed through unchanged.
+                if (static_cast<unsigned char>(character) < 0x20U) {
+                    char escape[7];
+                    std::snprintf(escape, sizeof(escape), "\\u%04x",
+                                  static_cast<unsigned>(static_cast<unsigned char>(character)));
+                    out += escape;
+                } else {
+                    out.push_back(character);
+                }
+                break;
+        }
+    }
+    out.push_back('"');
+    return out;
+}
+
+void JsonWriter::separate() {
+    buffer_ += buffer_.empty() ? "{" : ",";
+}
+
+JsonWriter& JsonWriter::text(const std::string_view key, const std::string_view value) {
+    separate();
+    buffer_ += quote(key);
+    buffer_ += ':';
+    buffer_ += quote(value);
+    return *this;
+}
+
+JsonWriter& JsonWriter::number(const std::string_view key, const double value) {
+    separate();
+    buffer_ += quote(key);
+    buffer_ += ':';
+    // Fixed notation with a bounded width: JSON has no infinity or NaN, and a
+    // default-formatted double can produce both.
+    if (!std::isfinite(value)) {
+        buffer_ += "null";
+    } else {
+        char formatted[32];
+        std::snprintf(formatted, sizeof(formatted), "%.4f", value);
+        buffer_ += formatted;
+    }
+    return *this;
+}
+
+JsonWriter& JsonWriter::integer(const std::string_view key, const std::uint64_t value) {
+    separate();
+    buffer_ += quote(key);
+    buffer_ += ':';
+    buffer_ += std::to_string(value);
+    return *this;
+}
+
+JsonWriter& JsonWriter::boolean(const std::string_view key, const bool value) {
+    separate();
+    buffer_ += quote(key);
+    buffer_ += ':';
+    buffer_ += value ? "true" : "false";
+    return *this;
+}
+
+std::string JsonWriter::take() {
+    std::string out = buffer_.empty() ? "{}" : buffer_ + "}";
+    buffer_.clear();
+    return out;
 }
 
 }  // namespace litemind

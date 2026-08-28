@@ -37,6 +37,15 @@ struct CliOptions final {
      */
     bool chat{true};
 
+    /**
+     * Emit one JSON object per line instead of the console report.
+     *
+     * The formatted output exists to be read by a person and is free to change
+     * with it; a program that scraped it would break on a reworded heading. The
+     * HTTP backend consumes this stream instead.
+     */
+    bool json_events{false};
+
     RunnerOptions runner{};
     GenerationOptions generation{};
 };

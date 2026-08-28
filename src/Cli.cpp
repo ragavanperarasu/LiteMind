@@ -98,6 +98,8 @@ void Cli::print_usage(const std::string& program_name) {
         "                          Anything else on the command line overrides it.\n"
         "      --no-plan           Skip the summary of what a prompt will cost.\n"
         "      --no-chat           Send prompts raw, without the checkpoint's chat frame.\n"
+        "      --json              Emit one JSON event per line instead of the report,\n"
+        "                          for a program rather than a person.\n"
         "      --inspect           Report what is in the model directory and exit.\n"
         "      --show-tokens       Print the token IDs the prompt encoded to.\n"
         "      --top-logits N      Print the N highest logits predicted after the\n"
@@ -402,6 +404,13 @@ bool Cli::parse(const int argc, char* argv[], CliOptions& options, std::string& 
             options.show_plan = false;
         } else if (argument == "--no-chat") {
             options.chat = false;
+        } else if (argument == "--json") {
+            options.json_events = true;
+            // Machine output and progress bars share stdout, so the report goes
+            // quiet rather than interleaving with the event stream.
+            options.show_plan = false;
+            options.runner.verbose = false;
+            options.generation.show_progress = false;
         } else if (argument == "-q" || argument == "--quiet") {
             options.runner.verbose = false;
             options.generation.show_progress = false;
@@ -644,6 +653,8 @@ int Cli::run(const CliOptions& options) const {
                   << runner.memory_report() << "\n";
     }
 
+    const auto emit = [](const std::string& line) { std::cout << line << std::endl; };
+
     // Whether prompts get the conversational frame is decided once, from the
     // checkpoint itself: a base model has no template and is left alone.
     const std::string& stored_template = runner.tokenizer().chat_template();
@@ -660,6 +671,25 @@ int Cli::run(const CliOptions& options) const {
         }
     }
 
+    if (options.json_events) {
+        const Config& model = runner.config();
+        JsonWriter ready;
+        emit(ready.text("event", "ready")
+                  .number("load_seconds", load_seconds)
+                  .text("model_type", model.model_type)
+                  .integer("hidden_size", model.hidden_size)
+                  .integer("layers", model.num_hidden_layers)
+                  .integer("moe_layers", model.num_hidden_layers - model.first_k_dense_replace)
+                  .integer("attention_heads", model.num_attention_heads)
+                  .integer("routed_experts", model.n_routed_experts)
+                  .integer("shared_experts", model.n_shared_experts)
+                  .integer("experts_per_token", model.num_experts_per_tok)
+                  .integer("vocab_size", model.vocab_size)
+                  .integer("context_length", options.runner.context_length)
+                  .boolean("chat_template", use_chat_template)
+                  .take());
+    }
+
     // A single prompt runs once; otherwise keep reading prompts from the console.
     std::vector<std::string> prompts;
     if (!options.prompt.empty()) {
@@ -672,7 +702,9 @@ int Cli::run(const CliOptions& options) const {
             prompt = prompts.front();
             prompts.erase(prompts.begin());
         } else if (options.interactive) {
-            std::cout << "Enter prompt (/exit to quit)> " << std::flush;
+            if (!options.json_events) {
+                std::cout << "Enter prompt (/exit to quit)> " << std::flush;
+            }
             if (!std::getline(std::cin, prompt)) {
                 std::cout << "\n";
                 break;
@@ -692,7 +724,14 @@ int Cli::run(const CliOptions& options) const {
         const std::string formatted = use_chat_template ? ChatTemplate::apply(prompt) : prompt;
         const std::vector<std::uint32_t> tokens = runner.tokenizer().encode(formatted);
         if (tokens.empty()) {
-            logger.error("The tokenizer produced no tokens for this prompt.");
+            if (options.json_events) {
+                JsonWriter event;
+                emit(event.text("event", "error")
+                          .text("message", "The tokenizer produced no tokens for this prompt.")
+                          .take());
+            } else {
+                logger.error("The tokenizer produced no tokens for this prompt.");
+            }
             continue;
         }
         if (options.show_tokens) {
@@ -701,6 +740,26 @@ int Cli::run(const CliOptions& options) const {
                 std::cout << "    " << std::setw(6) << token << "  "
                           << runner.tokenizer().token_text(token) << "\n";
             }
+        }
+
+        if (options.json_events) {
+            const PromptPlan plan =
+                build_plan(runner.config(), tokens.size(), options.generation.max_new_tokens);
+            JsonWriter event;
+            emit(event.text("event", "plan")
+                      .integer("prompt_tokens", plan.prompt_tokens)
+                      .integer("max_new_tokens", plan.max_new_tokens)
+                      .integer("forward_passes", plan.forward_passes)
+                      .integer("moe_layers", plan.moe_layers)
+                      .integer("experts_per_layer", plan.experts_per_layer)
+                      .integer("experts_per_token", plan.experts_per_token)
+                      .integer("distinct_experts", plan.moe_layers * plan.experts_per_layer)
+                      .integer("expert_activations", plan.expert_activations)
+                      .integer("expert_bytes", plan.expert_bytes)
+                      .integer("weight_traffic_bytes", plan.weight_traffic_bytes)
+                      .integer("total_parameters", plan.total_parameters)
+                      .integer("active_parameters", plan.active_parameters)
+                      .take());
         }
 
         if (options.show_plan && options.runner.verbose) {
@@ -719,7 +778,15 @@ int Cli::run(const CliOptions& options) const {
         // prefill progress rather than above it.
         bool answer_started = false;
         const bool announce_answer = options.show_plan && options.runner.verbose;
-        generation.on_text = [&answer_started, announce_answer](const std::string_view fragment) {
+        const bool json_events = options.json_events;
+        generation.on_text = [&answer_started, announce_answer,
+                              json_events](const std::string_view fragment) {
+            if (json_events) {
+                JsonWriter event;
+                std::cout << event.text("event", "token").text("text", fragment).take()
+                          << std::endl;
+                return;
+            }
             if (announce_answer && !answer_started) {
                 std::cout << "\n  Answer\n    ";
                 answer_started = true;
@@ -729,7 +796,26 @@ int Cli::run(const CliOptions& options) const {
 
         GenerationResult result;
         if (!runner.generate(tokens, generation, result, error)) {
-            logger.error(error);
+            if (options.json_events) {
+                JsonWriter event;
+                emit(event.text("event", "error").text("message", error).take());
+            } else {
+                logger.error(error);
+            }
+            continue;
+        }
+
+        if (options.json_events) {
+            JsonWriter event;
+            emit(event.text("event", "done")
+                      .text("text", result.text)
+                      .integer("generated_tokens", result.tokens.size())
+                      .integer("prompt_tokens", result.prompt_tokens)
+                      .number("prefill_seconds", result.prefill_seconds)
+                      .number("decode_seconds", result.decode_seconds)
+                      .number("tokens_per_second", result.tokens_per_second())
+                      .text("stop_reason", result.stop_reason)
+                      .take());
             continue;
         }
 
