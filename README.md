@@ -15,7 +15,12 @@ Built and tested against
 [mixture of experts](docs/06-mixture-of-experts.md),
 [expert cache](docs/07-expert-cache.md), [kernels](docs/08-kernels.md),
 [sampling](docs/09-sampling.md), [the CLI](docs/10-cli-and-config.md),
-[testing](docs/11-testing.md) and [performance](docs/12-performance.md).
+[testing](docs/11-testing.md), [performance](docs/12-performance.md),
+[the chat template](docs/13-chat-template.md) and [the web interface](docs/14-web-ui.md).
+
+**New here? Start with [Setup and prerequisites](docs/00-setup.md)** — what to
+install, how to verify it, how to get the checkpoint, and what to do when a step
+fails.
 
 ---
 

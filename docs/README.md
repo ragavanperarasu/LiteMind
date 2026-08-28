@@ -5,6 +5,7 @@ each stands on its own.
 
 | # | Page | What it covers |
 |---|---|---|
+| 00 | [Setup and prerequisites](00-setup.md) | Toolchain, checkpoint, first run, troubleshooting |
 | 1 | [Overview](01-overview.md) | The problem, the idea, and how a prompt flows end to end |
 | 2 | [Loading the checkpoint](02-loading.md) | `Json`, `Config`, `MappedFile`, `SafeTensor`, `WeightStore` |
 | 3 | [Tokenizer](03-tokenizer.md) | Byte-level BPE, added tokens, streaming decode |
