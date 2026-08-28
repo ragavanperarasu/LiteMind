@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { findExecutable, generate, readSettings, withoutComments } from './litemind.mjs';
+import { sampleUsage } from './usage.mjs';
 
 /**
  * The HTTP front end.
@@ -116,6 +117,7 @@ async function handleGenerate(request, response) {
 
   const run = generate({
     executable,
+    repositoryRoot,
     modelDirectory,
     prompt,
     settings: { ...settings, ...withoutComments(body.settings ?? {}) },
@@ -190,6 +192,10 @@ const server = http.createServer((request, response) => {
       settingsError: environment.settingsError,
       busy: Boolean(active),
     });
+    return;
+  }
+  if (url.pathname === '/api/usage') {
+    send(response, 200, { ...sampleUsage(), busy: Boolean(active) });
     return;
   }
   if (url.pathname === '/api/settings' && request.method === 'GET') {

@@ -93,6 +93,17 @@ struct DeepSeekRunner::Impl final {
     std::uint64_t expert_bytes{};
     bool loaded{false};
 
+    /**
+     * Which experts the current token was routed to, layer by layer.
+     *
+     * Recorded only when someone is watching, because the interesting use is a
+     * live picture of the routing and nothing else needs the data. Cleared and
+     * refilled per forward pass, so the vector's storage is reused and tracing
+     * costs one push_back per expert rather than an allocation per token.
+     */
+    bool trace_routing{false};
+    std::vector<std::uint32_t> routing_trace;
+
     [[nodiscard]] bool resolve_attention(std::size_t layer, AttentionWeights& weights, std::string& error);
     [[nodiscard]] bool resolve_feed_forward(const std::string& prefix, std::size_t intermediate_size,
                                             FeedForwardWeights& weights, std::string& error);
@@ -278,6 +289,9 @@ bool DeepSeekRunner::Impl::forward(const std::uint32_t token_id, const std::size
             router.select(router_logits, selection);
 
             for (const ExpertSelection& choice : selection) {
+                if (trace_routing) {
+                    routing_trace.push_back(static_cast<std::uint32_t>(choice.expert_index));
+                }
                 FeedForwardWeights expert = weights.experts[choice.expert_index];
                 // Declare the expert needed before computing with it. Under a
                 // budget this copies it into the cache's own arena, evicting a
@@ -531,6 +545,7 @@ bool DeepSeekRunner::generate(const std::vector<std::uint32_t>& prompt_tokens,
     Sampler sampler(options.sampling);
     Tokenizer::StreamDecoder decoder(state.tokenizer);
     const std::size_t max_stop_length = StopScanner::longest(options.stop_sequences);
+    state.trace_routing = static_cast<bool>(options.on_routing);
     std::vector<std::uint32_t> history = prompt_tokens;
 
     const auto decode_start = std::chrono::steady_clock::now();
@@ -586,9 +601,13 @@ bool DeepSeekRunner::generate(const std::vector<std::uint32_t>& prompt_tokens,
             result.stop_reason = "context full";
             break;
         }
+        state.routing_trace.clear();
         if (!state.forward(token, position, true)) {
             result.stop_reason = "context full";
             break;
+        }
+        if (options.on_routing) {
+            options.on_routing(state.routing_trace);
         }
         ++position;
     }
@@ -601,7 +620,33 @@ bool DeepSeekRunner::generate(const std::vector<std::uint32_t>& prompt_tokens,
         emit_up_to(result.text.size());
     }
     result.decode_seconds = seconds_since(decode_start);
+    state.trace_routing = false;
     return true;
+}
+
+DeepSeekRunner::MemoryFootprint DeepSeekRunner::memory_footprint() const {
+    const Impl& state = *impl_;
+    const StoreStatistics& statistics = state.store.statistics();
+
+    MemoryFootprint footprint;
+    footprint.mapped_bytes = statistics.mapped_bytes;
+    footprint.shards = statistics.shards;
+    footprint.tensors = statistics.tensors;
+    footprint.hot_bytes = state.hot_bytes;
+    footprint.routed_expert_bytes = state.expert_bytes;
+    for (const KvCache& cache : state.caches) {
+        footprint.kv_cache_bytes += cache.reserved_bytes();
+    }
+    if (state.experts.enabled()) {
+        footprint.expert_budget_bytes = state.experts.budget_bytes();
+        footprint.resident_expert_bytes = state.experts.resident_bytes();
+        footprint.resident_experts = state.experts.resident_experts();
+    }
+    footprint.expert_loads = state.experts.loads();
+    footprint.expert_hits = state.experts.hits();
+    footprint.expert_evictions = state.experts.evictions();
+    footprint.expert_bytes_streamed = state.experts.bytes_streamed();
+    return footprint;
 }
 
 std::string DeepSeekRunner::memory_report() const {

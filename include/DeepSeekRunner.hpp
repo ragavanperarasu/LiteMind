@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -50,6 +51,15 @@ struct GenerationOptions final {
      * settled either way.
      */
     std::vector<std::string> stop_sequences;
+
+    /**
+     * Called after each generated token with the experts it was routed to,
+     * ordered layer by layer: moe_layers entries of experts_per_layer each.
+     *
+     * Leaving this unset turns the recording off entirely rather than merely
+     * discarding it, so nothing is paid for a picture nobody is watching.
+     */
+    std::function<void(std::span<const std::uint32_t>)> on_routing;
     bool show_progress{true};
 
     /**
@@ -120,6 +130,34 @@ public:
 
     /** A multi-line report of memory layout and residency, for the console. */
     [[nodiscard]] std::string memory_report() const;
+
+    /**
+     * The same figures as memory_report, as numbers.
+     *
+     * The report is prose meant to be read; anything that needs to compute with
+     * these - a chart, a gauge, a threshold - needs them unformatted.
+     */
+    struct MemoryFootprint final {
+        std::uint64_t mapped_bytes{};
+        std::uint64_t shards{};
+        std::uint64_t tensors{};
+        std::uint64_t hot_bytes{};
+        std::uint64_t routed_expert_bytes{};
+        std::uint64_t kv_cache_bytes{};
+
+        /** Zero unless an --expert-cache budget is in force. */
+        std::uint64_t expert_budget_bytes{};
+        std::uint64_t resident_expert_bytes{};
+        std::uint64_t resident_experts{};
+
+        /** Cumulative since load, for a hit-rate that means something. */
+        std::uint64_t expert_loads{};
+        std::uint64_t expert_hits{};
+        std::uint64_t expert_evictions{};
+        std::uint64_t expert_bytes_streamed{};
+    };
+
+    [[nodiscard]] MemoryFootprint memory_footprint() const;
 
 private:
     struct Impl;

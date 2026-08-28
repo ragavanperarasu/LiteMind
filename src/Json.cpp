@@ -533,6 +533,14 @@ JsonWriter& JsonWriter::boolean(const std::string_view key, const bool value) {
     return *this;
 }
 
+JsonWriter& JsonWriter::raw(const std::string_view key, const std::string_view json) {
+    separate();
+    buffer_ += quote(key);
+    buffer_ += ':';
+    buffer_.append(json);
+    return *this;
+}
+
 std::string JsonWriter::take() {
     std::string out = buffer_.empty() ? "{}" : buffer_ + "}";
     buffer_.clear();

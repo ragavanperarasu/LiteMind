@@ -94,7 +94,7 @@ export function createEventParser(onEvent, onMalformed) {
  * interruptible from inside - the decode loop only checks its own stop
  * conditions - so cancelling means ending the process that is doing the work.
  */
-export function generate({ executable, modelDirectory, prompt, settings, onEvent }) {
+export function generate({ executable, repositoryRoot, modelDirectory, prompt, settings, onEvent }) {
   const args = [modelDirectory, '-p', prompt, '--json'];
 
   const maxTokens = Number(settings.max_tokens);
@@ -116,11 +116,34 @@ export function generate({ executable, modelDirectory, prompt, settings, onEvent
     args.push('--expert-cache', String(expertCache));
   }
 
+  // Every sampling control is passed explicitly rather than left to the engine
+  // to read from litemind.json. That lookup is relative to the working
+  // directory, so relying on it would make the reply depend on where the server
+  // happened to be started - the interface and the command line would sample
+  // differently from the same settings, which is the sort of difference that
+  // gets mistaken for a fault in the model.
+  const topK = Number(settings.top_k);
+  if (Number.isFinite(topK) && topK >= 0) args.push('--top-k', String(topK));
+
+  const topP = Number(settings.top_p);
+  if (Number.isFinite(topP) && topP > 0) args.push('--top-p', String(topP));
+
+  const repeatPenalty = Number(settings.repeat_penalty);
+  if (Number.isFinite(repeatPenalty) && repeatPenalty > 0) {
+    args.push('--repeat-penalty', String(repeatPenalty));
+  }
+
+  const seed = Number(settings.seed);
+  if (Number.isFinite(seed) && seed > 0) args.push('--seed', String(seed));
+
   if (settings.chat === false) args.push('--no-chat');
+
+  // Routing is 156 numbers a token, so it is asked for rather than assumed.
+  if (settings.routing) args.push('--routing');
 
   // No shell: the prompt is passed as one argv entry, so quoting and shell
   // metacharacters in it mean nothing.
-  const child = spawn(executable, args, { shell: false });
+  const child = spawn(executable, args, { shell: false, cwd: repositoryRoot });
 
   const parser = createEventParser(onEvent, (line) => {
     onEvent({ event: 'error', message: `Unreadable output from the engine: ${line}` });

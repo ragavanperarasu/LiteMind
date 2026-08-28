@@ -85,6 +85,12 @@ public:
     JsonWriter& integer(std::string_view key, std::uint64_t value);
     JsonWriter& boolean(std::string_view key, bool value);
 
+    /**
+     * Inserts an already-formed JSON value, for the arrays this writer does not
+     * build itself. The caller owns its validity - nothing here checks it.
+     */
+    JsonWriter& raw(std::string_view key, std::string_view json);
+
     /** Closes the object and returns it. The writer is empty again afterwards. */
     [[nodiscard]] std::string take();
 

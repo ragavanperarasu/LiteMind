@@ -33,6 +33,8 @@ So `--json` gives the same information as a stream of objects, one per line:
 | `plan` | before each prompt runs | token counts, expert counts, parameter counts |
 | `token` | per decoded fragment | the text |
 | `done` | when the reply ends | timings, throughput, stop reason |
+| `memory` | after `ready` | mapped, hot, routed, KV-cache and expert-cache bytes |
+| `routing` | per generated token, with `--routing` | the experts that token used |
 | `error` | on failure | the message |
 
 `--json` also silences the report, because both would otherwise be writing to
@@ -105,6 +107,38 @@ The panel names the pool size and the reuse factor next to the execution count
 for exactly that reason, and swaps the planned ceilings for what the reply
 actually cost once it finishes.
 
+## The routing map
+
+`--routing` reports the expert indices each token was routed to, layer by layer:
+`moe_layers × top-k` numbers per token, 156 of them for DeepSeek-V2-Lite. It is
+off unless asked for, and the recording itself is skipped entirely when nobody
+is observing — an unset callback turns the `push_back` off rather than
+collecting data to discard.
+
+The interface draws that as one dot per routed expert: a column is a layer, a
+row is an expert within it, 26 × 64 = **1,664 dots**. Six light up per column
+per token.
+
+That picture is the argument of the whole project in one image. Almost the
+entire grid stays dark while the model answers, and the dark part is weight that
+never left the disk. Brightness accumulates over a reply, so it also shows which
+experts a particular prompt kept returning to — and the coverage figure says how
+much of the pool a reply reached at all.
+
+## What the usage panel can and cannot say
+
+Host CPU and memory come from `node:os`. Per-core utilisation is a **difference
+between two readings** — `os.cpus()` reports time accumulated since boot, not a
+rate — so the first sample after startup reads zero and the second is the first
+real one.
+
+The panel deliberately does not claim a memory figure for the engine process.
+The weights are a mapping of a file: most of what the engine "uses" is page
+cache the operating system owns and will reclaim the moment something else needs
+it. A resident-set number would look precise and mean very little. What is shown
+instead is the engine's own accounting — what it mapped, what stays hot, what is
+streamed — which is the part that is actually true.
+
 ## Endpoints
 
 | Method | Path | Purpose |
@@ -113,6 +147,7 @@ actually cost once it finishes.
 | `GET` | `/api/settings` | `litemind.json`, without its comment keys |
 | `PUT` | `/api/settings` | Merge changes in, preserving the comments |
 | `POST` | `/api/generate` | Run a prompt, streaming events back |
+| `GET` | `/api/usage` | Host CPU and memory, sampled between calls |
 | `POST` | `/api/cancel` | Kill the running generation |
 
 Settings are read from and written to the same `litemind.json` the command line

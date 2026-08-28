@@ -12,6 +12,12 @@ export async function fetchHealth() {
   return response.json();
 }
 
+export async function fetchUsage() {
+  const response = await fetch('/api/usage');
+  if (!response.ok) throw new Error(`Usage read failed: ${response.status}`);
+  return response.json();
+}
+
 export async function fetchSettings() {
   const response = await fetch('/api/settings');
   const body = await response.json();

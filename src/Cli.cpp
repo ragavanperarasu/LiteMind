@@ -4,6 +4,8 @@
 #include "Gemm.hpp"
 #include "ChatTemplate.hpp"
 #include "Json.hpp"
+
+#include <span>
 #include "Logger.hpp"
 #include "SafeTensor.hpp"
 #include "Threading.hpp"
@@ -100,6 +102,7 @@ void Cli::print_usage(const std::string& program_name) {
         "      --no-chat           Send prompts raw, without the checkpoint's chat frame.\n"
         "      --json              Emit one JSON event per line instead of the report,\n"
         "                          for a program rather than a person.\n"
+        "      --routing           With --json, report the experts each token used.\n"
         "      --inspect           Report what is in the model directory and exit.\n"
         "      --show-tokens       Print the token IDs the prompt encoded to.\n"
         "      --top-logits N      Print the N highest logits predicted after the\n"
@@ -404,6 +407,8 @@ bool Cli::parse(const int argc, char* argv[], CliOptions& options, std::string& 
             options.show_plan = false;
         } else if (argument == "--no-chat") {
             options.chat = false;
+        } else if (argument == "--routing") {
+            options.report_routing = true;
         } else if (argument == "--json") {
             options.json_events = true;
             // Machine output and progress bars share stdout, so the report goes
@@ -688,6 +693,24 @@ int Cli::run(const CliOptions& options) const {
                   .integer("context_length", options.runner.context_length)
                   .boolean("chat_template", use_chat_template)
                   .take());
+
+        const DeepSeekRunner::MemoryFootprint footprint = runner.memory_footprint();
+        JsonWriter memory;
+        emit(memory.text("event", "memory")
+                   .integer("mapped_bytes", footprint.mapped_bytes)
+                   .integer("shards", footprint.shards)
+                   .integer("tensors", footprint.tensors)
+                   .integer("hot_bytes", footprint.hot_bytes)
+                   .integer("routed_expert_bytes", footprint.routed_expert_bytes)
+                   .integer("kv_cache_bytes", footprint.kv_cache_bytes)
+                   .integer("expert_budget_bytes", footprint.expert_budget_bytes)
+                   .integer("resident_expert_bytes", footprint.resident_expert_bytes)
+                   .integer("resident_experts", footprint.resident_experts)
+                   .integer("expert_loads", footprint.expert_loads)
+                   .integer("expert_hits", footprint.expert_hits)
+                   .integer("expert_evictions", footprint.expert_evictions)
+                   .integer("expert_bytes_streamed", footprint.expert_bytes_streamed)
+                   .take());
     }
 
     // A single prompt runs once; otherwise keep reading prompts from the console.
@@ -793,6 +816,24 @@ int Cli::run(const CliOptions& options) const {
             }
             std::cout << fragment << std::flush;
         };
+
+        if (options.json_events && options.report_routing) {
+            generation.on_routing = [](const std::span<const std::uint32_t> experts) {
+                // Built by hand: the writer emits flat objects, and this is the
+                // one value in the protocol that is a list.
+                std::string list;
+                list.reserve(experts.size() * 4U + 2U);
+                list.push_back('[');
+                for (std::size_t index = 0; index < experts.size(); ++index) {
+                    if (index != 0U) list.push_back(',');
+                    list += std::to_string(experts[index]);
+                }
+                list.push_back(']');
+                JsonWriter event;
+                std::cout << event.text("event", "routing").raw("experts", list).take()
+                          << std::endl;
+            };
+        }
 
         GenerationResult result;
         if (!runner.generate(tokens, generation, result, error)) {

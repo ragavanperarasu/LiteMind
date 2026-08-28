@@ -46,6 +46,14 @@ struct CliOptions final {
      */
     bool json_events{false};
 
+    /**
+     * Report which experts each token was routed to.
+     *
+     * Off by default: it is 156 numbers per token, useful for watching the
+     * sparsity happen and pure noise otherwise.
+     */
+    bool report_routing{false};
+
     RunnerOptions runner{};
     GenerationOptions generation{};
 };
