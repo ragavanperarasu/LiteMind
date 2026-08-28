@@ -155,6 +155,58 @@ powershell -ExecutionPolicy Bypass -File scripts\download_model.ps1 -Destination
 
 ### 5. Run
 
+One command builds whatever changed and then asks for a prompt:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\run.ps1
+```
+
+That is the command for every run, not just the first. The build is
+incremental, so nothing is recompiled when no source has changed.
+
+Everything it can be told is in `litemind.json` at the top of the repository.
+Edit that file and run the same command again — there are no flags to remember:
+
+```json
+{
+  "model": "models",
+  "max_tokens": 32,
+  "context": 1024,
+  "threads": 0,
+  "expert_cache_gb": 0,
+  "warm": false,
+  "temperature": 0,
+  "top_k": 40,
+  "top_p": 0.95,
+  "repeat_penalty": 1.0,
+  "seed": 0,
+  "show_plan": true,
+  "show_tokens": false
+}
+```
+
+Each prompt reports what it is about to cost before it answers:
+
+```
+Enter prompt (/exit to quit)> The capital of France is
+
+  This prompt needs
+    Tokens       6 in the prompt, up to 32 to generate  (38 forward passes)
+    Experts      6 of 64 per layer across 26 MoE layers = 156 per token
+                 5,928 expert executions, 16.5 MiB each, 95.5 GiB of weight reads
+    Parameters   15.71 B in the model, 2.45 B active per token (15.6%)
+    Settings     8 threads, context 1024, greedy sampling, experts left to the page cache
+
+  Answer
+     Paris.
+```
+
+Those figures come from `config.json`, not from a measurement, so they are
+available before the work starts. They match what the run then reports.
+
+The command line still works and always wins over the settings file, which is
+what makes it useful for one-off comparisons:
+
 ```powershell
 .\build\bin\LiteMind.exe models --inspect
 .\build\bin\LiteMind.exe models -p "The capital of France is" -n 32
@@ -275,6 +327,8 @@ Memory and speed
       --warm              Stream the always-hot weights in at load
 
 Diagnostics
+      --config PATH       Read settings from PATH instead of litemind.json
+      --no-plan           Skip the summary of what a prompt will cost
       --inspect           Report what is in the model directory and exit
       --show-tokens       Print the token IDs the prompt encoded to
       --top-logits N      Print the N highest logits predicted after the prompt

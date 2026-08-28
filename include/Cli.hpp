@@ -18,6 +18,17 @@ struct CliOptions final {
     bool show_logits{false};
     bool show_help{false};
 
+    /**
+     * Settings file read before the arguments, so an argument always wins.
+     * Absent by default is not an error; naming one with --config that does not
+     * exist is.
+     */
+    std::filesystem::path config_path{"litemind.json"};
+    bool config_required{false};
+
+    /** Print the work a prompt implies before running it. */
+    bool show_plan{true};
+
     RunnerOptions runner{};
     GenerationOptions generation{};
 };
@@ -30,8 +41,20 @@ struct CliOptions final {
  */
 class Cli final {
 public:
-    /** Parses argv. Returns false and sets error on a malformed argument. */
+    /**
+     * Parses argv, applying the settings file first so an argument overrides it.
+     * Returns false and sets error on a malformed argument or settings file.
+     */
     [[nodiscard]] static bool parse(int argc, char* argv[], CliOptions& options, std::string& error);
+
+    /**
+     * Applies a JSON settings file to options. Returns false and sets error when
+     * the file is unreadable or malformed; a missing file is reported through
+     * present so an absent default can be ignored.
+     */
+    [[nodiscard]] static bool apply_config_file(const std::filesystem::path& path,
+                                                CliOptions& options, bool& present,
+                                                std::string& error);
 
     /** Prints the usage text. */
     static void print_usage(const std::string& program_name);

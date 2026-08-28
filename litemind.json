@@ -1,0 +1,22 @@
+{
+  "_comment": "LiteMind settings. Change values here instead of typing flags. Anything passed on the command line overrides this file.",
+
+  "model": "models",
+  "max_tokens": 32,
+  "context": 1024,
+  "threads": 0,
+
+  "_expert_cache_gb": "0 leaves expert residency to the OS page cache, which is fastest when there is RAM to spare. A budget copies experts into an arena of that size. Below about 2.6 GB every expert is evicted before it is reused, so use 0 or at least 4.",
+  "expert_cache_gb": 0,
+  "warm": false,
+
+  "_sampling": "temperature 0 means greedy decoding, which is reproducible. Set it above 0 to sample, and top_k / top_p then apply.",
+  "temperature": 0,
+  "top_k": 40,
+  "top_p": 0.95,
+  "repeat_penalty": 1.0,
+  "seed": 0,
+
+  "show_plan": true,
+  "show_tokens": false
+}
