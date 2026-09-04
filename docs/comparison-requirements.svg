@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="332" viewBox="0 0 760 332" role="img" aria-label="RAM needed to run LiteMind">
+<title>RAM needed to run LiteMind</title>
+<text x="0" y="22" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="600" fill="#7d8590">RAM needed to run LiteMind</text>
+<text x="0" y="42" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#8b949e">DeepSeek-V2-Lite at BF16, default 1,024-token context</text>
+<line x1="188.0" y1="66" x2="188.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="188.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">0</text>
+<line x1="307.0" y1="66" x2="307.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="307.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">2</text>
+<line x1="426.0" y1="66" x2="426.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="426.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">4</text>
+<line x1="545.0" y1="66" x2="545.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="545.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">6</text>
+<line x1="664.0" y1="66" x2="664.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="664.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">8</text>
+<text x="176" y="94" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#7d8590" text-anchor="end">Resident floor</text>
+<rect x="188" y="78" width="170.7" height="22" rx="3" fill="#7aa2f7" opacity="1.0"/>
+<text x="368.7" y="94" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="600" fill="#7d8590">2.87 GiB</text>
+<text x="188" y="113" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#8b949e" opacity="0.9">always-hot weights 2.44 GiB + KV cache 0.43 GiB</text>
+<text x="176" y="144" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#7d8590" text-anchor="end">+ smallest useful arena</text>
+<rect x="188" y="128" width="320.0" height="22" rx="3" fill="#7aa2f7" opacity="1.0"/>
+<text x="518.0" y="144" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="600" fill="#7d8590">5.38 GiB</text>
+<text x="188" y="163" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#8b949e" opacity="0.9">--expert-cache 2.51 - one token's expert working set</text>
+<text x="176" y="194" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#7d8590" text-anchor="end">+ recommended arena</text>
+<rect x="188" y="178" width="408.7" height="22" rx="3" fill="#7aa2f7" opacity="1.0"/>
+<text x="606.7" y="194" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="600" fill="#7d8590">6.87 GiB</text>
+<text x="188" y="213" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#8b949e" opacity="0.9">--expert-cache 4 - the smallest budget worth setting</text>
+<text x="176" y="244" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="400" fill="#8b949e" text-anchor="end">No budget</text>
+<rect x="188" y="228" width="476" height="22" rx="3" fill="none" stroke="#8b949e" stroke-width="1" stroke-dasharray="4 4" opacity="0.5"/>
+<text x="198" y="244" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#8b949e" font-style="italic">no fixed size - the page cache takes what the machine allows, and this is the fastest setting</text>
+<text x="0" y="324" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#8b949e" opacity="0.9">Measured components. The last row has no fixed size: without a budget the operating system caches as much as the machine allows.</text>
+</svg>

@@ -37,7 +37,7 @@ import React from 'react';
 import App from '../src/App.jsx';
 import { docs, sections, flatOrder } from '../src/lib/content.js';
 import { parseRoute } from '../src/lib/router.js';
-import { renderMarkdown } from '../src/lib/markdown.js';
+import { renderMarkdown, figures } from '../src/lib/markdown.js';
 
 const failures = [];
 
@@ -99,6 +99,17 @@ for (const doc of docs) {
       continue;
     }
     failures.push(`${doc.id}: unresolved href ${href}`);
+  }
+}
+
+// Every figure a page asks for has to have been inlined. A missing one renders
+// as a visible error rather than a broken image, which is better - but it
+// should never reach a reader at all.
+console.log(`figures inlined: ${[...figures.keys()].join(', ') || 'none'}`);
+for (const doc of docs) {
+  const html = renderMarkdown(doc.markdown, doc.id);
+  for (const match of html.matchAll(/class="missing-figure">Missing figure: ([^<]+)</g)) {
+    failures.push(`${doc.id}: no such figure ${match[1]}`);
   }
 }
 

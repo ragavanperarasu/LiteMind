@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="332" viewBox="0 0 760 332" role="img" aria-label="Throughput">
+<title>Throughput</title>
+<text x="0" y="22" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="600" fill="#7d8590">Throughput</text>
+<text x="0" y="42" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#8b949e">Same prompt, same laptop: 8 threads, AVX2 + FMA, NVMe SSD, 32 GB RAM</text>
+<line x1="188.0" y1="66" x2="188.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="188.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">0</text>
+<line x1="307.0" y1="66" x2="307.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="307.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">1</text>
+<line x1="426.0" y1="66" x2="426.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="426.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">2</text>
+<line x1="545.0" y1="66" x2="545.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="545.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">3</text>
+<line x1="664.0" y1="66" x2="664.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="664.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">4</text>
+<text x="176" y="94" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="400" fill="#8b949e" text-anchor="end">Ollama  Q4_K_M</text>
+<rect x="188" y="78" width="476" height="22" rx="3" fill="none" stroke="#8b949e" stroke-width="1" stroke-dasharray="4 4" opacity="0.5"/>
+<text x="198" y="94" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#8b949e" font-style="italic">not measured</text>
+<text x="176" y="144" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="400" fill="#8b949e" text-anchor="end">llama.cpp  Q4_K_M</text>
+<rect x="188" y="128" width="476" height="22" rx="3" fill="none" stroke="#8b949e" stroke-width="1" stroke-dasharray="4 4" opacity="0.5"/>
+<text x="198" y="144" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#8b949e" font-style="italic">not measured</text>
+<text x="176" y="194" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#7d8590" text-anchor="end">LiteMind  page cache</text>
+<rect x="188" y="178" width="412.9" height="22" rx="3" fill="#7aa2f7" opacity="1.0"/>
+<text x="610.9" y="194" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="600" fill="#7d8590">3.47 tok/s</text>
+<text x="188" y="213" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#8b949e" opacity="0.9">measured, warm</text>
+<text x="176" y="244" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#7d8590" text-anchor="end">LiteMind  --expert-cache 4</text>
+<rect x="188" y="228" width="105.9" height="22" rx="3" fill="#7aa2f7" opacity="1.0"/>
+<text x="303.9" y="244" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="600" fill="#7d8590">0.89 tok/s</text>
+<text x="188" y="263" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#8b949e" opacity="0.9">measured, bounded arena</text>
+<text x="0" y="324" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#8b949e" opacity="0.9">Neither llama.cpp nor Ollama was run for this page, so neither is given a bar. The last section has the commands to fill them in.</text>
+</svg>

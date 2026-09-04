@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="332" viewBox="0 0 760 332" role="img" aria-label="Weight bytes read per generated token">
+<title>Weight bytes read per generated token</title>
+<text x="0" y="22" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="600" fill="#7d8590">Weight bytes read per generated token</text>
+<text x="0" y="42" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#8b949e">2.45 B active parameters — the number that decides throughput on a bandwidth-bound CPU</text>
+<line x1="188.0" y1="66" x2="188.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="188.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">0</text>
+<line x1="283.2" y1="66" x2="283.2" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="283.2" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">1</text>
+<line x1="378.4" y1="66" x2="378.4" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="378.4" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">2</text>
+<line x1="473.6" y1="66" x2="473.6" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="473.6" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">3</text>
+<line x1="568.8" y1="66" x2="568.8" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="568.8" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">4</text>
+<line x1="664.0" y1="66" x2="664.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="664.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">5</text>
+<text x="176" y="94" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="400" fill="#8b949e" text-anchor="end">Ollama  Q4_K_M</text>
+<rect x="188" y="78" width="131.8" height="22" rx="3" fill="#7f849c" opacity="0.55"/>
+<text x="329.8" y="94" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="400" fill="#7d8590">1.38 GiB</text>
+<text x="176" y="144" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="400" fill="#8b949e" text-anchor="end">llama.cpp  Q4_K_M</text>
+<rect x="188" y="128" width="131.8" height="22" rx="3" fill="#7f849c" opacity="0.55"/>
+<text x="329.8" y="144" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="400" fill="#7d8590">1.38 GiB</text>
+<text x="176" y="194" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="400" fill="#8b949e" text-anchor="end">llama.cpp  BF16</text>
+<rect x="188" y="178" width="434.7" height="22" rx="3" fill="#7f849c" opacity="0.55"/>
+<text x="632.7" y="194" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="400" fill="#7d8590">4.57 GiB</text>
+<text x="176" y="244" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#7d8590" text-anchor="end">LiteMind  BF16</text>
+<rect x="188" y="228" width="434.7" height="22" rx="3" fill="#7aa2f7" opacity="1.0"/>
+<text x="632.7" y="244" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="600" fill="#7d8590">4.57 GiB</text>
+<text x="188" y="263" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#8b949e" opacity="0.9">3.3x a Q4_K_M run</text>
+<text x="0" y="324" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#8b949e" opacity="0.9">Arithmetic. Fewer bytes per token is faster when the CPU is waiting on memory, which page 12 shows it is.</text>
+</svg>

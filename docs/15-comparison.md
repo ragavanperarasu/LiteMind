@@ -37,18 +37,7 @@ every model; LiteMind runs one model unquantised and shows its working.
 Quantisation is the whole story. LiteMind reads the weights in the precision
 they were trained in; the others almost always read a compressed copy.
 
-```
-Checkpoint size, DeepSeek-V2-Lite, 15.7 B parameters
-
-BF16   LiteMind   ████████████████████████████████████████  29.3 GiB
-Q8_0              █████████████████████                     15.5 GiB
-Q6_K              ████████████████                          12.0 GiB
-Q5_K_M            ██████████████                            10.4 GiB
-Q4_K_M            ████████████                               8.9 GiB
-Q4_0              ███████████                                8.3 GiB
-
-                  arithmetic from bits-per-weight; BF16 row confirmed on disk
-```
+![Checkpoint on disk: Ollama and llama.cpp at Q4_K_M are 8.87 GiB, llama.cpp at BF16 and LiteMind are 29.26 GiB](comparison-storage.svg)
 
 | Format | Bits/weight | File | Storage needed |
 |---|---|---|---|
@@ -71,28 +60,23 @@ waits.
 Only 2.45 B of the 15.7 B parameters are active per token, so this is 15.6% of
 the file either way — the quantisation ratio simply carries straight through.
 
-```
-Weight bytes read per generated token (2.45 B active parameters)
-
-BF16   LiteMind   ████████████████████████████████████████  4.57 GiB
-Q8_0              █████████████████████                     2.43 GiB
-Q6_K              ████████████████                          1.87 GiB
-Q5_K_M            ██████████████                            1.62 GiB
-Q4_K_M            ████████████                              1.38 GiB
-
-                  LiteMind moves 3.3x the bytes of a Q4_K_M run
-```
+![Weight bytes read per generated token: 1.38 GiB at Q4_K_M against 4.57 GiB for LiteMind at BF16](comparison-traffic.svg)
 
 Measured against that: LiteMind reaches **3.47 tok/s** with the page cache
 warm. A Q4\_K\_M run moves a third of the bytes on the same hardware, so it
 should be substantially faster. **How much faster is not stated here, because it
-was not measured.** LiteMind's own performance page reaches the same conclusion
-from the inside — quantisation is listed there as "the biggest win by far".
+was not measured** — which is what the two open bars below mean. LiteMind's own
+performance page reaches the same conclusion from the inside: quantisation is
+listed there as "the biggest win by far".
+
+![Throughput: LiteMind measured at 3.47 tokens per second with the page cache and 0.89 with a bounded arena; llama.cpp and Ollama not measured](comparison-throughput.svg)
 
 ## What has to stay in RAM
 
 Here the comparison is not about size but about *control*, and the honest
 version has two halves.
+
+![Weights that must be resident: 1.50 GiB at Q4_K_M, 4.96 GiB at BF16 for both llama.cpp and LiteMind](comparison-ram.svg)
 
 LiteMind's floor is small and known:
 
@@ -124,14 +108,7 @@ explains why in detail.
 
 ## Minimum requirements
 
-```
-RAM, LiteMind, DeepSeek-V2-Lite
-
-resident floor (hot + KV)      ███████████                 2.87 GiB
-+ smallest useful arena        ████████████████████        5.38 GiB   --expert-cache 2.51
-+ recommended arena            ██████████████████████████  6.87 GiB   --expert-cache 4
-no budget, page cache decides  ── as much as the machine will give ──   fastest
-```
+![RAM needed to run LiteMind: a 2.87 GiB resident floor, 5.38 GiB with the smallest useful arena, 6.87 GiB with the recommended one](comparison-requirements.svg)
 
 | | Minimum | Recommended | Measured configuration |
 |---|---|---|---|

@@ -42,7 +42,29 @@ export default function MarkdownStyles() {
           borderTop: `1px solid ${palette.divider}`,
         },
         // A `---` just before a heading would draw the same line twice.
-        '.markdown-body hr + h2': { borderTop: 0, paddingTop: 0, marginTop: 24 },
+        // The charts are authored at a fixed width; they scale down rather than
+      // pushing the page sideways on a phone.
+      '.markdown-body .doc-figure': {
+        margin: '28px 0',
+        padding: 0,
+        overflowX: 'auto',
+      },
+      '.markdown-body .doc-figure svg': {
+        display: 'block',
+        width: '100%',
+        maxWidth: 760,
+        // Below this the 10px annotations shrink to nothing, so on a phone the
+        // figure scrolls inside its own box rather than becoming unreadable.
+        minWidth: 620,
+        height: 'auto',
+      },
+      '.markdown-body .missing-figure': {
+        color: theme.palette.error.main,
+        fontFamily: 'monospace',
+        fontSize: '0.85rem',
+      },
+
+      '.markdown-body hr + h2': { borderTop: 0, paddingTop: 0, marginTop: 24 },
         '.markdown-body h3': {
           fontSize: '1.1rem',
           fontWeight: 650,

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="332" viewBox="0 0 760 332" role="img" aria-label="Checkpoint on disk">
+<title>Checkpoint on disk</title>
+<text x="0" y="22" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="600" fill="#7d8590">Checkpoint on disk</text>
+<text x="0" y="42" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#8b949e">DeepSeek-V2-Lite, 15.7 B parameters — the same model in four forms</text>
+<line x1="188.0" y1="66" x2="188.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="188.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">0</text>
+<line x1="267.3" y1="66" x2="267.3" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="267.3" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">5</text>
+<line x1="346.7" y1="66" x2="346.7" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="346.7" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">10</text>
+<line x1="426.0" y1="66" x2="426.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="426.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">15</text>
+<line x1="505.3" y1="66" x2="505.3" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="505.3" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">20</text>
+<line x1="584.7" y1="66" x2="584.7" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="584.7" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">25</text>
+<line x1="664.0" y1="66" x2="664.0" y2="264" stroke="#8b949e" stroke-width="1" opacity="0.18"/>
+<text x="664.0" y="282" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" fill="#8b949e" text-anchor="middle" opacity="0.85">30</text>
+<text x="176" y="94" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="400" fill="#8b949e" text-anchor="end">Ollama  deepseek-v2:16b</text>
+<rect x="188" y="78" width="140.7" height="22" rx="3" fill="#7f849c" opacity="0.55"/>
+<text x="338.7" y="94" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="400" fill="#7d8590">8.87 GiB</text>
+<text x="188" y="113" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#8b949e" opacity="0.9">Q4_K_M, what the registry serves</text>
+<text x="176" y="144" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="400" fill="#8b949e" text-anchor="end">llama.cpp  Q4_K_M</text>
+<rect x="188" y="128" width="140.7" height="22" rx="3" fill="#7f849c" opacity="0.55"/>
+<text x="338.7" y="144" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="400" fill="#7d8590">8.87 GiB</text>
+<text x="188" y="163" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#8b949e" opacity="0.9">the usual choice</text>
+<text x="176" y="194" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="400" fill="#8b949e" text-anchor="end">llama.cpp  BF16</text>
+<rect x="188" y="178" width="464.2" height="22" rx="3" fill="#7f849c" opacity="0.55"/>
+<text x="662.2" y="194" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="400" fill="#7d8590">29.26 GiB</text>
+<text x="188" y="213" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#8b949e" opacity="0.9">like-for-like with LiteMind</text>
+<text x="176" y="244" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#7d8590" text-anchor="end">LiteMind</text>
+<rect x="188" y="228" width="464.2" height="22" rx="3" fill="#7aa2f7" opacity="1.0"/>
+<text x="662.2" y="244" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" font-weight="600" fill="#7d8590">29.26 GiB</text>
+<text x="188" y="263" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#8b949e" opacity="0.9">BF16, the only format it reads</text>
+<text x="0" y="324" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#8b949e" opacity="0.9">Arithmetic from published bits-per-weight. The BF16 rows predict 29.25 GiB; the checkpoint on disk is 29.3 GiB.</text>
+</svg>
