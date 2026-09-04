@@ -25,6 +25,18 @@ namespace litemind {
 class ChatTemplate final {
 public:
     /**
+     * One completed exchange: what was asked, and what the model answered.
+     *
+     * A turn is only ever added once its reply is finished, so both halves are
+     * present. A question still being answered is the current prompt, not
+     * history.
+     */
+    struct Turn final {
+        std::string user;
+        std::string assistant;
+    };
+
+    /**
      * Returns true when template_text is the DeepSeek conversational frame this
      * class implements. Absent or unfamiliar templates return false.
      */
@@ -36,6 +48,24 @@ public:
      * already prepends it, so the result is encoded with add_bos left on.
      */
     [[nodiscard]] static std::string apply(std::string_view user_text,
+                                           std::string_view system_text = {});
+
+    /**
+     * The same frame with earlier exchanges in front of the new question.
+     *
+     * The model has no memory of its own: every request re-reads the whole
+     * conversation, and remembering an earlier turn means putting that turn
+     * back into the prompt. Each finished reply is closed with end_of_turn,
+     * which is the checkpoint's end-of-sequence text - the template appends it
+     * after an assistant message and nowhere else, and it is what tells the
+     * model that turn is over rather than something to continue.
+     *
+     * Passing an empty end_of_turn produces a frame the model was not trained
+     * on, so the caller reads it from the tokenizer rather than spelling it out.
+     */
+    [[nodiscard]] static std::string apply(const std::vector<Turn>& history,
+                                           std::string_view user_text,
+                                           std::string_view end_of_turn,
                                            std::string_view system_text = {});
 
     /**

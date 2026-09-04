@@ -153,7 +153,7 @@ const groups = [
   },
   { label: 'Producing text', ids: ['09-sampling', '13-chat-template'] },
   { label: 'Running it', ids: ['10-cli-and-config', '14-web-ui'] },
-  { label: 'Evidence', ids: ['11-testing', '12-performance'] },
+  { label: 'Evidence', ids: ['11-testing', '12-performance', '15-comparison'] },
 ];
 
 export const sections = groups

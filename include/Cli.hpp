@@ -38,6 +38,26 @@ struct CliOptions final {
     bool chat{true};
 
     /**
+     * A conversation to put in front of the prompt, as a JSON array of
+     * {"role", "content"} objects.
+     *
+     * The engine holds nothing between prompts, so remembering an earlier
+     * exchange means sending it again. Keeping the transcript on the caller's
+     * side rather than in a session here is what lets a request be answered by
+     * a process that did not serve the one before it.
+     */
+    std::filesystem::path history_path;
+
+    /**
+     * Carry each finished exchange into the next prompt of an interactive run.
+     *
+     * Off by default, because it changes what a prompt means: the same question
+     * asked twice stops being the same request. /reset clears the transcript
+     * without ending the session.
+     */
+    bool remember{false};
+
+    /**
      * Emit one JSON object per line instead of the console report.
      *
      * The formatted output exists to be read by a person and is free to change

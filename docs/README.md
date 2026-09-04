@@ -24,6 +24,7 @@ each stands on its own.
 | 12 | [Performance](12-performance.md) | Measured numbers and the memory/traffic trade |
 | 13 | [The chat template](13-chat-template.md) | Why a chat checkpoint needs its User/Assistant frame |
 | 14 | [The web interface](14-web-ui.md) | The JSON event stream, the Node backend, the React front end |
+| 15 | [Comparison and requirements](15-comparison.md) | Against llama.cpp and Ollama, and what a machine needs |
 
 [`model-info.json`](model-info.json) is an annotated dump of the architecture
 itself — layer counts, expert counts, where the parameters sit.

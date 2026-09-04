@@ -41,6 +41,44 @@ void formatting() {
           "prompt text is passed through untouched");
 }
 
+/**
+ * The frame the Jinja template produces for a conversation: every completed
+ * assistant message is closed with eos_token, and only the new question is left
+ * open for the model to answer.
+ */
+void conversation() {
+    const std::string eos = "<|eos|>";
+    const std::vector<ChatTemplate::Turn> history = {
+        {"capital of France?", "Paris."},
+        {"and Japan?", "Tokyo."},
+    };
+
+    check(ChatTemplate::apply(history, "population?", eos)
+              == "User: capital of France?\n\nAssistant: Paris.<|eos|>"
+                 "User: and Japan?\n\nAssistant: Tokyo.<|eos|>"
+                 "User: population?\n\nAssistant:",
+          "earlier exchanges come first, oldest to newest, each closed with eos");
+
+    check(ChatTemplate::apply(history, "population?", eos, "Be brief.")
+              == "Be brief.\n\nUser: capital of France?\n\nAssistant: Paris.<|eos|>"
+                 "User: and Japan?\n\nAssistant: Tokyo.<|eos|>"
+                 "User: population?\n\nAssistant:",
+          "a system message still leads, ahead of the whole conversation");
+
+    // The single-turn overload is this one with nothing remembered, so the two
+    // cannot drift into formatting the same prompt differently.
+    check(ChatTemplate::apply({}, "hi", eos) == ChatTemplate::apply("hi"),
+          "an empty conversation formats exactly as a lone prompt");
+    check(ChatTemplate::apply({}, "hi", eos, "Be brief.") == ChatTemplate::apply("hi", "Be brief."),
+          "and the same holds with a system message");
+
+    // Only completed replies carry the marker, so a reply that is still being
+    // written is never mistaken for a settled one.
+    check(ChatTemplate::apply(history, "population?", eos).find("Assistant:</")
+              == std::string::npos,
+          "the open cue at the end carries no end-of-sequence text");
+}
+
 void stop_markers() {
     const std::vector<std::string> stops = ChatTemplate::stop_sequences();
     check(StopScanner::longest(stops) == std::string("\nAssistant:").size(),
@@ -79,6 +117,7 @@ void partial_markers_are_held_back() {
 int main() {
     recognition();
     formatting();
+    conversation();
     stop_markers();
     partial_markers_are_held_back();
     return test_support::report("ChatTemplateTest");

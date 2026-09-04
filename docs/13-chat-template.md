@@ -127,10 +127,47 @@ When a marker completes, the text before it is emitted, the result is truncated
 at the marker, and the decoder's held-back bytes are discarded rather than
 flushed: they belong to text that is no longer part of the reply.
 
-## What this does not do
+## Remembering an earlier turn
 
-Only one turn is formatted. The interactive loop treats every prompt as a fresh
-conversation and re-runs the prefill, so the model has no memory of the previous
-exchange. Multi-turn history would mean carrying the KV cache across prompts and
-appending `Assistant: {reply}<eos>` for each completed turn — the frame above
-already describes how, but nothing in the runner keeps that state yet.
+The model has no memory. Nothing is carried between prompts — not the KV cache,
+not the process, nothing — so remembering an earlier exchange means putting that
+exchange back into the prompt. That is all a conversation is here: the same
+frame, with the finished turns in front of the new question.
+
+```
+User: capital of France?
+
+Assistant: Paris.<｜end▁of▁sentence｜>User: and Japan?
+
+Assistant:
+```
+
+Each completed reply is closed with the checkpoint's end-of-sequence text,
+because that is what the Jinja template appends after an assistant message and
+nowhere else. It is the difference between the model reading a settled turn and
+reading one it is expected to keep writing. Only the last `Assistant:` is left
+open.
+
+Two ways in:
+
+| | |
+|---|---|
+| `--history PATH` | A JSON array of `{"role", "content"}` objects, alternating user and assistant. The roles must alternate and the array must end on a finished reply — the question being asked now goes to `--prompt`. |
+| `--remember` | In interactive mode, each finished exchange is carried into the next prompt. `/reset` forgets them without ending the session. |
+
+A malformed transcript is refused rather than repaired, and it is read before
+the checkpoint is mapped, so the error arrives immediately instead of after the
+load.
+
+### When it no longer fits
+
+The conversation grows and the context does not. Before each prompt the whole
+frame is encoded and measured against `--context`; while the prompt plus
+`--max-tokens` would overflow it, the **oldest** exchange is dropped and the
+frame rebuilt. A conversation that quietly forgot its beginning reads like a
+model that stopped paying attention, so the count is reported rather than
+swallowed — as a line on the console, and as `history_dropped` in the `plan`
+event that the web interface turns into a warning chip.
+
+The default 1,024-token context holds only a few turns of real text. Raising
+`--context` costs about 450 KB of KV cache per position.

@@ -30,7 +30,7 @@ So `--json` gives the same information as a stream of objects, one per line:
 | Event | When | Carries |
 |---|---|---|
 | `ready` | after the checkpoint loads | architecture, context, whether a chat template applies |
-| `plan` | before each prompt runs | token counts, expert counts, parameter counts |
+| `plan` | before each prompt runs | token counts, expert counts, parameter counts, how many remembered exchanges went in and how many were dropped |
 | `token` | per decoded fragment | the text |
 | `done` | when the reply ends | timings, throughput, stop reason |
 | `memory` | after `ready` | mapped, hot, routed, KV-cache and expert-cache bytes |
@@ -61,6 +61,20 @@ mechanism that makes streaming work at all.
 What it buys is that a cancelled request leaves nothing behind. Killing the
 process resets the KV cache, the sampler and the expert residency together, with
 no state to unwind by hand.
+
+It also means the conversation cannot live in the engine, because the process
+that answers one question is not the one that answered the last. It lives in the
+page instead: the browser keeps the transcript and sends the finished exchanges
+back with each new prompt, and the server writes them to a temporary file for
+`--history`. A transcript is unbounded and a command line is not — Windows caps
+one at 32,767 characters, which a dozen turns can reach — and a file also keeps
+the text out of the process table. The file is deleted when the process exits.
+
+Only settled turns are sent. A reply that was stopped or that failed has no
+answer to remember, and feeding half a reply back would make it context for
+everything after it: the model would carry on from the break rather than treat
+it as something already said. Both halves of such a turn are dropped together,
+because a question with no answer is not a turn.
 
 Requests are serialised. The engine already spreads one token across every core,
 so two prompts at once would halve the threads available to each and make both
@@ -146,9 +160,11 @@ streamed — which is the part that is actually true.
 | `GET` | `/api/health` | Is the engine built, is a checkpoint present, is one running |
 | `GET` | `/api/settings` | `litemind.json`, without its comment keys |
 | `PUT` | `/api/settings` | Merge changes in, preserving the comments |
-| `POST` | `/api/generate` | Run a prompt, streaming events back |
+| `POST` | `/api/generate` | Run a prompt, streaming events back. Takes `prompt`, an optional `history` of `{role, content}` messages, and optional `settings` |
 | `GET` | `/api/usage` | Host CPU and memory, sampled between calls |
 | `POST` | `/api/cancel` | Kill the running generation |
 
 Settings are read from and written to the same `litemind.json` the command line
 uses, so a change made in the browser applies to `scripts\run.ps1` and back.
+
+Next: [Comparison and requirements](15-comparison.md)

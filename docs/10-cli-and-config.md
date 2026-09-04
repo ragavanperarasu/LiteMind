@@ -31,6 +31,8 @@ and run the same command again.
   "top_p": 0.95,
   "repeat_penalty": 1.0,
   "seed": 0,
+  "chat": true,
+  "remember": false,
   "show_plan": true,
   "show_tokens": false
 }
@@ -73,6 +75,8 @@ LiteMind [model-directory] [options]
 Prompting
   -p, --prompt TEXT       Run one prompt and exit
   -i, --interactive       Keep asking for prompts until you type /exit
+      --remember          Carry each finished exchange into the next prompt
+      --history PATH      Put an earlier conversation in front of the prompt
   -n, --max-tokens N      Tokens to generate (default 128)
       --context N         Prompt plus generated tokens (default 1024)
 
@@ -91,12 +95,35 @@ Memory and speed
 Diagnostics
       --config PATH       Read settings from PATH instead of litemind.json
       --no-plan           Skip the summary of what a prompt will cost
+      --no-chat           Send prompts raw, without the checkpoint's chat frame
       --inspect           Report what is in the model directory and exit
       --show-tokens       Print the token IDs the prompt encoded to
       --top-logits N      Print the N highest logits predicted after the prompt
   -q, --quiet             Suppress progress output
   -h, --help              Show the usage text
 ```
+
+## `--remember` and `--history`
+
+Nothing is kept between prompts, so a conversation is made by sending the
+earlier turns again. `--remember` does that inside one interactive session;
+`--history PATH` takes a transcript from a file, which is how the web interface
+does it:
+
+```json
+[
+  {"role": "user",      "content": "capital of France?"},
+  {"role": "assistant", "content": "Paris."}
+]
+```
+
+The roles must alternate, and the array must end on a finished reply — the
+question being asked now belongs to `--prompt`. An optional `"system"` entry may
+come first. When the conversation no longer fits `--context`, the oldest
+exchanges are dropped and the number is reported.
+
+[The chat template](13-chat-template.md) has the frame this produces and what
+the end-of-sequence marker between turns is for.
 
 ## `--inspect`
 

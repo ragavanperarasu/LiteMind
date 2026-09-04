@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 
 /**
@@ -94,8 +96,22 @@ export function createEventParser(onEvent, onMalformed) {
  * interruptible from inside - the decode loop only checks its own stop
  * conditions - so cancelling means ending the process that is doing the work.
  */
-export function generate({ executable, repositoryRoot, modelDirectory, prompt, settings, onEvent }) {
+export function generate({
+  executable, repositoryRoot, modelDirectory, prompt, history, settings, onEvent,
+}) {
   const args = [modelDirectory, '-p', prompt, '--json'];
+
+  // The conversation goes to the engine in a file rather than on the command
+  // line. A transcript is unbounded and argument lists are not - Windows caps a
+  // command line at 32,767 characters, which a dozen turns can reach - and a
+  // file keeps the text out of the process table, where anything on the machine
+  // could read it.
+  let historyFile = null;
+  if (Array.isArray(history) && history.length > 0) {
+    historyFile = path.join(os.tmpdir(), `litemind-chat-${randomUUID()}.json`);
+    writeFileSync(historyFile, JSON.stringify(history), 'utf8');
+    args.push('--history', historyFile);
+  }
 
   const maxTokens = Number(settings.max_tokens);
   if (Number.isFinite(maxTokens) && maxTokens > 0) args.push('-n', String(maxTokens));
@@ -156,13 +172,22 @@ export function generate({ executable, repositoryRoot, modelDirectory, prompt, s
     stderrText += chunk.toString('utf8');
   });
 
+  // The engine reads the transcript once at startup, but deleting it before the
+  // process has exited would race that read on a slow disk, so it waits.
+  const discardHistory = () => {
+    if (historyFile) rmSync(historyFile, { force: true });
+    historyFile = null;
+  };
+
   let cancelled = false;
   const finished = new Promise((resolve) => {
     child.on('error', (cause) => {
+      discardHistory();
       onEvent({ event: 'error', message: `Could not start the engine: ${cause.message}` });
       resolve();
     });
     child.on('close', (code) => {
+      discardHistory();
       parser.flush();
       if (cancelled) {
         onEvent({ event: 'cancelled' });

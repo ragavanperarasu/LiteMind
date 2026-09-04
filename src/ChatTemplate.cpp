@@ -26,14 +26,41 @@ bool ChatTemplate::recognise(const std::string_view template_text) {
 
 std::string ChatTemplate::apply(const std::string_view user_text,
                                 const std::string_view system_text) {
+    return apply({}, user_text, {}, system_text);
+}
+
+std::string ChatTemplate::apply(const std::vector<Turn>& history,
+                                const std::string_view user_text,
+                                const std::string_view end_of_turn,
+                                const std::string_view system_text) {
+    std::size_t reserved = system_text.size() + user_text.size() + 32U;
+    for (const Turn& turn : history) {
+        reserved += turn.user.size() + turn.assistant.size() + end_of_turn.size() + 32U;
+    }
+
     std::string formatted;
-    formatted.reserve(system_text.size() + user_text.size() + 32U);
+    formatted.reserve(reserved);
 
     // A system message is emitted bare, with no marker of its own.
     if (!system_text.empty()) {
         formatted.append(system_text);
         formatted.append("\n\n");
     }
+
+    // Earlier exchanges first, oldest to newest. A finished reply is closed
+    // with the end-of-sequence text rather than a blank line, because that is
+    // what the template appends after an assistant message - and it is the
+    // difference between the model reading a settled turn and reading one it
+    // is expected to keep writing.
+    for (const Turn& turn : history) {
+        formatted.append("User: ");
+        formatted.append(turn.user);
+        formatted.append("\n\n");
+        formatted.append("Assistant: ");
+        formatted.append(turn.assistant);
+        formatted.append(end_of_turn);
+    }
+
     formatted.append("User: ");
     formatted.append(user_text);
     formatted.append("\n\n");

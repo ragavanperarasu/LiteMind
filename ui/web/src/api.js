@@ -39,15 +39,19 @@ export async function saveSettings(settings) {
 /**
  * Runs a prompt, calling onEvent for each event as it arrives.
  *
+ * history is the conversation so far, as {role, content} messages. The engine
+ * holds nothing between requests, so it is sent in full every time: what the
+ * model remembers is exactly what is in the prompt.
+ *
  * signal aborts the request, which closes the connection; the backend notices
  * and kills the engine, so cancelling actually stops the work rather than just
  * hiding it.
  */
-export async function streamGeneration({ prompt, settings, signal, onEvent }) {
+export async function streamGeneration({ prompt, history, settings, signal, onEvent }) {
   const response = await fetch('/api/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, settings }),
+    body: JSON.stringify({ prompt, history, settings }),
     signal,
   });
 

@@ -39,6 +39,30 @@ const SECTIONS = [
 
 const emptyRouting = { counts: null, currentSet: new Set(), tokens: 0, touched: 0 };
 
+/**
+ * The finished exchanges, as the engine wants them.
+ *
+ * Only settled turns go in. A reply that was stopped or that failed has no
+ * answer to remember, and feeding a half-written one back would make it context
+ * for everything after it - the model would carry on from the break rather than
+ * treat it as something already said. Both halves of such a turn are dropped
+ * together, because a question with no answer is not a turn.
+ */
+function conversationFrom(messages) {
+  const history = [];
+  for (let index = 0; index + 1 < messages.length; index += 2) {
+    const asked = messages[index];
+    const answered = messages[index + 1];
+    if (asked?.role !== 'user' || answered?.role !== 'assistant') break;
+    if (answered.error || !answered.text?.trim()) continue;
+    history.push(
+      { role: 'user', content: asked.text },
+      { role: 'assistant', content: answered.text },
+    );
+  }
+  return history;
+}
+
 export default function App() {
   const [section, setSection] = useState('chat');
   const [health, setHealth] = useState(null);
@@ -53,6 +77,10 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // On by default: a conversation that forgets is the surprising behaviour, not
+  // the other way round. Turning it off makes every prompt independent again,
+  // which is what comparing two answers to the same question needs.
+  const [remember, setRemember] = useState(true);
 
   const abortRef = useRef(null);
   // Counts are mutated per token and read once per render; keeping the array in
@@ -100,6 +128,10 @@ export default function App() {
         return next;
       });
 
+    // Read before the new pair is on screen, so the prompt being asked now is
+    // not also part of its own history.
+    const history = remember ? conversationFrom(messages) : [];
+
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -111,6 +143,7 @@ export default function App() {
     try {
       await streamGeneration({
         prompt: text,
+        history,
         // Routing is only worth its bandwidth when there is somewhere to show it.
         settings: { routing: true },
         signal: controller.signal,
@@ -174,7 +207,17 @@ export default function App() {
       setRunning(false);
       abortRef.current = null;
     }
-  }, [prompt, running, model]);
+  }, [prompt, running, model, messages, remember]);
+
+  // Forgetting is emptying the transcript: there is no session on the other
+  // side to end, because there was never one to begin with.
+  const clearConversation = useCallback(() => {
+    setMessages([]);
+    setPlan(null);
+    setRouting(emptyRouting);
+    setError(null);
+    countsRef.current = null;
+  }, []);
 
   const stop = () => {
     abortRef.current?.abort();
@@ -182,6 +225,7 @@ export default function App() {
   };
 
   const blocked = Boolean(health && !health.ready);
+  const rememberedTurns = useMemo(() => conversationFrom(messages).length / 2, [messages]);
   const lastStats = useMemo(
     () => [...messages].reverse().find((message) => message.stats)?.stats ?? null,
     [messages],
@@ -291,6 +335,9 @@ export default function App() {
               messages={messages} prompt={prompt} setPrompt={setPrompt}
               running={running} blocked={blocked} error={error}
               onSubmit={submit} onStop={stop}
+              remember={remember} onToggleRemember={() => setRemember((on) => !on)}
+              rememberedTurns={rememberedTurns} onClear={clearConversation}
+              droppedTurns={plan?.history_dropped ?? 0}
             />
           )}
           {section === 'model' && (

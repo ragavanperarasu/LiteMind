@@ -55,6 +55,42 @@ const readBody = (request) =>
     request.on('error', reject);
   });
 
+/**
+ * Checks a conversation sent by the browser before it reaches the engine.
+ *
+ * The engine refuses a malformed transcript rather than repairing one, and it
+ * is better to say why here than to let a 500 come back from a process the
+ * reader cannot see. The cap is on turns rather than bytes because the body
+ * limit already bounds the size, and a conversation this long has outgrown the
+ * context anyway.
+ */
+const MAX_HISTORY_MESSAGES = 200;
+
+function validateHistory(value) {
+  if (value === undefined || value === null) return { history: [] };
+  if (!Array.isArray(value)) return { error: 'The conversation must be an array.' };
+  if (value.length > MAX_HISTORY_MESSAGES) {
+    return { error: `The conversation is longer than ${MAX_HISTORY_MESSAGES} messages.` };
+  }
+  const history = [];
+  for (const [index, message] of value.entries()) {
+    if (!message || typeof message !== 'object') {
+      return { error: `Message ${index} of the conversation is not an object.` };
+    }
+    const { role, content } = message;
+    if (role !== 'user' && role !== 'assistant' && role !== 'system') {
+      return { error: `Message ${index} has an unknown role: ${JSON.stringify(role)}.` };
+    }
+    if (typeof content !== 'string') {
+      return { error: `Message ${index} has no text.` };
+    }
+    // Only the two fields the engine reads are forwarded; anything the
+    // interface keeps alongside a turn - timings, stop reasons - is its own.
+    history.push({ role, content });
+  }
+  return { history };
+}
+
 function describeEnvironment() {
   const executable = findExecutable(repositoryRoot);
   let settings = {};
@@ -104,6 +140,12 @@ async function handleGenerate(request, response) {
     return;
   }
 
+  const { history, error: historyError } = validateHistory(body.history);
+  if (historyError) {
+    send(response, 400, { error: historyError });
+    return;
+  }
+
   // Server-sent events: the reply arrives a token at a time over seconds, and
   // this is the one streaming transport that needs nothing on either side.
   response.writeHead(200, {
@@ -120,6 +162,7 @@ async function handleGenerate(request, response) {
     repositoryRoot,
     modelDirectory,
     prompt,
+    history,
     settings: { ...settings, ...withoutComments(body.settings ?? {}) },
     onEvent: write,
   });

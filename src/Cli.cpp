@@ -24,6 +24,60 @@
 namespace litemind {
 namespace {
 
+/**
+ * Reads a conversation from a JSON array of {"role", "content"} objects.
+ *
+ * The roles must alternate user, assistant, and the array must end on a
+ * finished assistant reply: the question still being answered arrives as the
+ * prompt, not as history. An optional "system" entry may come first. A
+ * malformed transcript is refused rather than repaired, because every way of
+ * repairing it silently changes what the model is asked.
+ */
+[[nodiscard]] bool load_history(const std::filesystem::path& path,
+                                std::vector<ChatTemplate::Turn>& history,
+                                std::string& system_text, std::string& error) {
+    Json document;
+    if (!Json::parse_file(path.string(), document, error)) {
+        error = "Could not read the conversation in " + path.string() + ": " + error;
+        return false;
+    }
+    if (!document.is_array()) {
+        error = path.string() + " must hold a JSON array of {\"role\", \"content\"} objects.";
+        return false;
+    }
+
+    const std::vector<Json>& entries = document.elements();
+    std::size_t index = 0U;
+    if (!entries.empty() && entries.front().string_or("role", "") == "system") {
+        system_text = entries.front().string_or("content", "");
+        index = 1U;
+    }
+
+    for (; index < entries.size(); index += 2U) {
+        const std::string user_role = entries[index].string_or("role", "");
+        if (user_role != "user") {
+            error = "Entry " + std::to_string(index) + " of " + path.string()
+                  + " should be a user message but is \"" + user_role + "\".";
+            return false;
+        }
+        if (index + 1U >= entries.size()) {
+            error = path.string()
+                  + " ends on a question with no answer. The prompt being asked now goes to"
+                    " --prompt; only finished exchanges belong in the history.";
+            return false;
+        }
+        const std::string assistant_role = entries[index + 1U].string_or("role", "");
+        if (assistant_role != "assistant") {
+            error = "Entry " + std::to_string(index + 1U) + " of " + path.string()
+                  + " should be an assistant reply but is \"" + assistant_role + "\".";
+            return false;
+        }
+        history.push_back({entries[index].string_or("content", ""),
+                           entries[index + 1U].string_or("content", "")});
+    }
+    return true;
+}
+
 [[nodiscard]] std::string format_bytes(const std::uint64_t bytes) {
     constexpr double unit = 1024.0;
     const char* const names[] = {"B", "KiB", "MiB", "GiB", "TiB"};
@@ -75,6 +129,12 @@ void Cli::print_usage(const std::string& program_name) {
         "Prompting:\n"
         "  -p, --prompt TEXT       Run one prompt and exit.\n"
         "  -i, --interactive       Keep asking for prompts until you type /exit.\n"
+        "      --remember          In interactive mode, carry each finished exchange\n"
+        "                          into the next prompt. /reset forgets them again.\n"
+        "      --history PATH      Put an earlier conversation in front of the prompt.\n"
+        "                          A JSON array of {\"role\", \"content\"} objects,\n"
+        "                          alternating user and assistant. Oldest exchanges\n"
+        "                          are dropped when they no longer fit the context.\n"
         "  -n, --max-tokens N      Tokens to generate (default 128).\n"
         "      --context N         Prompt plus generated tokens (default 1024).\n"
 "                          Each position costs about 450 KB of key/value\n"
@@ -114,7 +174,9 @@ void Cli::print_usage(const std::string& program_name) {
         "Examples:\n"
         "  " << program_name << " models --inspect\n"
         "  " << program_name << " models -p \"The capital of France is\" -n 32\n"
-        "  " << program_name << " models -i --expert-cache 4 --warm\n";
+        "  " << program_name << " models -i --expert-cache 4 --warm\n"
+        "  " << program_name << " models -i --remember\n"
+        "  " << program_name << " models -p \"And the population?\" --history chat.json\n";
 }
 
 namespace {
@@ -342,6 +404,7 @@ bool Cli::apply_config_file(const std::filesystem::path& path, CliOptions& optio
         document.unsigned_or("seed", options.generation.sampling.seed);
 
     options.chat = document.boolean_or("chat", options.chat);
+    options.remember = document.boolean_or("remember", options.remember);
     options.show_plan = document.boolean_or("show_plan", options.show_plan);
     options.show_tokens = document.boolean_or("show_tokens", options.show_tokens);
     options.prompt = document.string_or("prompt", options.prompt);
@@ -405,6 +468,14 @@ bool Cli::parse(const int argc, char* argv[], CliOptions& options, std::string& 
             }
         } else if (argument == "--no-plan") {
             options.show_plan = false;
+        } else if (argument == "--remember") {
+            options.remember = true;
+        } else if (argument == "--history") {
+            std::string history_value;
+            if (!next_value(argc, argv, index, argument, history_value, error)) {
+                return false;
+            }
+            options.history_path = history_value;
         } else if (argument == "--no-chat") {
             options.chat = false;
         } else if (argument == "--routing") {
@@ -642,6 +713,20 @@ int Cli::run(const CliOptions& options) const {
                   << " threads\n";
     }
 
+    // The conversation carried in front of each prompt. It starts as whatever
+    // --history supplied and, with --remember, grows by one exchange a turn.
+    // Read before the checkpoint: a malformed transcript should be reported
+    // now, not after a 29.3 GiB mapping has been walked.
+    std::vector<ChatTemplate::Turn> history;
+    std::string system_text;
+    if (!options.history_path.empty()) {
+        std::string history_error;
+        if (!load_history(options.history_path, history, system_text, history_error)) {
+            logger.error(history_error);
+            return 1;
+        }
+    }
+
     DeepSeekRunner runner;
     std::string error;
     const auto load_start = std::chrono::steady_clock::now();
@@ -713,6 +798,15 @@ int Cli::run(const CliOptions& options) const {
                    .take());
     }
 
+    if (!history.empty() && !use_chat_template) {
+        // Without the frame there is no User:/Assistant: structure to put the
+        // transcript into, so it would arrive as one run-on paragraph.
+        logger.warning("A conversation was supplied but the chat frame is off, so earlier "
+                       "turns are being ignored.");
+        history.clear();
+        system_text.clear();
+    }
+
     // A single prompt runs once; otherwise keep reading prompts from the console.
     std::vector<std::string> prompts;
     if (!options.prompt.empty()) {
@@ -726,7 +820,13 @@ int Cli::run(const CliOptions& options) const {
             prompts.erase(prompts.begin());
         } else if (options.interactive) {
             if (!options.json_events) {
-                std::cout << "Enter prompt (/exit to quit)> " << std::flush;
+                if (options.remember && !history.empty()) {
+                    std::cout << "Enter prompt (" << history.size()
+                              << (history.size() == 1U ? " exchange" : " exchanges")
+                              << " remembered, /reset to forget, /exit to quit)> " << std::flush;
+                } else {
+                    std::cout << "Enter prompt (/exit to quit)> " << std::flush;
+                }
             }
             if (!std::getline(std::cin, prompt)) {
                 std::cout << "\n";
@@ -734,6 +834,13 @@ int Cli::run(const CliOptions& options) const {
             }
             if (prompt == "/exit" || prompt == "/quit") {
                 break;
+            }
+            if (prompt == "/reset") {
+                const std::size_t forgotten = history.size();
+                history.clear();
+                std::cout << "  Forgot " << forgotten
+                          << (forgotten == 1U ? " exchange.\n" : " exchanges.\n");
+                continue;
             }
             if (prompt.empty()) {
                 continue;
@@ -744,8 +851,45 @@ int Cli::run(const CliOptions& options) const {
         // An instruction-tuned checkpoint expects its conversational frame. Fed a
         // bare fragment it completes the fragment instead of answering it, which
         // reads like a model fault rather than a formatting one.
-        const std::string formatted = use_chat_template ? ChatTemplate::apply(prompt) : prompt;
-        const std::vector<std::uint32_t> tokens = runner.tokenizer().encode(formatted);
+        //
+        // The frame is rebuilt from the whole conversation every turn, because
+        // that is the only thing the model reads: it has no memory, so an
+        // earlier exchange is remembered exactly as long as it stays in the
+        // prompt. When the transcript outgrows the context the oldest exchanges
+        // are dropped rather than the newest, and the count is reported - a
+        // conversation that quietly forgot its beginning looks like a model
+        // that stopped paying attention.
+        std::vector<ChatTemplate::Turn> carried = history;
+        std::size_t dropped = 0U;
+        std::string formatted;
+        std::vector<std::uint32_t> tokens;
+        if (use_chat_template) {
+            const std::string end_of_turn =
+                runner.tokenizer().token_text(runner.tokenizer().eos_token_id());
+            for (;;) {
+                formatted = ChatTemplate::apply(carried, prompt, end_of_turn, system_text);
+                tokens = runner.tokenizer().encode(formatted);
+                const std::size_t needed = tokens.size() + options.generation.max_new_tokens;
+                if (carried.empty() || needed <= options.runner.context_length) {
+                    break;
+                }
+                carried.erase(carried.begin());
+                ++dropped;
+            }
+            if (dropped != 0U) {
+                history.erase(history.begin(),
+                              history.begin() + static_cast<std::ptrdiff_t>(dropped));
+                if (!options.json_events && options.runner.verbose) {
+                    std::cout << "  Dropped the " << dropped
+                              << (dropped == 1U ? " oldest exchange" : " oldest exchanges")
+                              << " to stay inside the " << options.runner.context_length
+                              << "-token context.\n";
+                }
+            }
+        } else {
+            formatted = prompt;
+            tokens = runner.tokenizer().encode(formatted);
+        }
         if (tokens.empty()) {
             if (options.json_events) {
                 JsonWriter event;
@@ -771,6 +915,8 @@ int Cli::run(const CliOptions& options) const {
             JsonWriter event;
             emit(event.text("event", "plan")
                       .integer("prompt_tokens", plan.prompt_tokens)
+                      .integer("history_turns", carried.size())
+                      .integer("history_dropped", dropped)
                       .integer("max_new_tokens", plan.max_new_tokens)
                       .integer("forward_passes", plan.forward_passes)
                       .integer("moe_layers", plan.moe_layers)
@@ -844,6 +990,12 @@ int Cli::run(const CliOptions& options) const {
                 logger.error(error);
             }
             continue;
+        }
+
+        // Recorded only after a reply that finished: a cancelled or failed turn
+        // would otherwise become half of the context for every prompt after it.
+        if (options.remember && use_chat_template) {
+            history.push_back({prompt, result.text});
         }
 
         if (options.json_events) {

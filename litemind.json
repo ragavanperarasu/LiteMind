@@ -20,6 +20,9 @@
   "_chat": "An instruction-tuned checkpoint carries a chat_template in tokenizer_config.json and expects prompts wrapped in its User/Assistant frame. true applies that frame when the checkpoint has one, and does nothing when it does not. Set false to send prompts raw, which is what comparing logits against a reference implementation needs.",
   "chat": true,
 
+  "_remember": "In interactive mode, carry each finished exchange into the next prompt so a question can follow on from the last one. Off by default, because it changes what a prompt means: the same question asked twice stops being the same request. /reset forgets the conversation without ending the session. The web interface keeps its own transcript and does not read this.",
+  "remember": false,
+
   "show_plan": true,
   "show_tokens": false
 }

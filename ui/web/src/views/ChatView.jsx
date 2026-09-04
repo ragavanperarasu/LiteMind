@@ -9,24 +9,33 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import Divider from '@mui/material/Divider';
+import IconButton from '@mui/material/IconButton';
+import Switch from '@mui/material/Switch';
+import Tooltip from '@mui/material/Tooltip';
 import PersonIcon from '@mui/icons-material/Person';
 import MemoryIcon from '@mui/icons-material/Memory';
 import SendIcon from '@mui/icons-material/Send';
 import StopIcon from '@mui/icons-material/Stop';
+import HistoryIcon from '@mui/icons-material/History';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 
 import { seconds } from '../format.js';
 
 /**
  * The conversation.
  *
- * Turns are shown as a transcript, but each one is sent to the engine on its
- * own: the runner re-reads the prompt from scratch every time and keeps no
- * state between requests, so earlier turns are history for the reader, not
- * context for the model. Presenting it as a running conversation without
- * saying so would promise a memory that is not there.
+ * The engine still keeps nothing between requests - each prompt is a fresh
+ * process reading a fresh prompt. What makes the transcript a conversation is
+ * that the finished exchanges are sent again with every new question, so the
+ * memory lives here, in the page, and is only as good as what fits in the
+ * context window. The counter says how much is actually being carried, because
+ * a conversation that has quietly dropped its opening reads like a model that
+ * stopped paying attention.
  */
 export default function ChatView({
   messages, prompt, setPrompt, running, blocked, onSubmit, onStop, error,
+  remember, onToggleRemember, rememberedTurns, onClear, droppedTurns,
 }) {
   const endRef = useRef(null);
   const scrollRef = useRef(null);
@@ -47,14 +56,54 @@ export default function ChatView({
 
   return (
     <Stack sx={{ height: 'calc(100vh - 132px)' }}>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ pb: 1 }}>
+        <Tooltip title={
+          remember
+            ? 'Finished exchanges are sent again with each new question, so the model can refer back to them.'
+            : 'Each question is answered on its own, with nothing carried over.'
+        }>
+          <Chip
+            size="small"
+            icon={<HistoryIcon />}
+            variant={remember ? 'filled' : 'outlined'}
+            color={remember ? 'primary' : 'default'}
+            label={
+              !remember
+                ? 'Memory off'
+                : rememberedTurns === 0
+                  ? 'Memory on'
+                  : `Remembering ${rememberedTurns} ${rememberedTurns === 1 ? 'exchange' : 'exchanges'}`
+            }
+          />
+        </Tooltip>
+        {droppedTurns > 0 && (
+          <Tooltip title="The conversation outgrew the context window, so the oldest exchanges were left out of the last prompt. Raise --context in settings to keep more.">
+            <Chip size="small" variant="outlined" color="warning"
+                  label={`${droppedTurns} dropped to fit the context`} />
+          </Tooltip>
+        )}
+        <Box sx={{ flexGrow: 1 }} />
+        <Typography variant="caption" color="text.secondary">Remember</Typography>
+        <Switch size="small" checked={remember} onChange={onToggleRemember} disabled={running} />
+        <Tooltip title="Start a new conversation">
+          <span>
+            <IconButton size="small" onClick={onClear} disabled={running || messages.length === 0}>
+              <DeleteSweepIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+      </Stack>
+      <Divider sx={{ mb: 2 }} />
+
       <Box ref={scrollRef} sx={{ flexGrow: 1, overflowY: 'auto', pr: 1 }}>
         {messages.length === 0 && (
           <Stack alignItems="center" justifyContent="center" sx={{ height: '100%', opacity: 0.6 }}>
             <MemoryIcon sx={{ fontSize: 44, mb: 1 }} />
             <Typography variant="h6">Ask something</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 460, textAlign: 'center' }}>
-              Each turn is answered on its own — the engine keeps no memory between prompts, so a
-              question has to stand by itself.
+              {remember
+                ? 'Each finished exchange is sent again with your next question, so you can follow one up with another. Turn Remember off to ask each question on its own.'
+                : 'Each question is answered on its own, with nothing carried over from the last one.'}
             </Typography>
           </Stack>
         )}
